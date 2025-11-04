@@ -1,5 +1,6 @@
 name: build-rp2040
 on:
+  workflow_dispatch:
   push:
     paths:
       - 'firmware/**'
