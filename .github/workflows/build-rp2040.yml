@@ -45,6 +45,11 @@ jobs:
           PICO_BOARD=feather_host cmake ..
           make remapper
           cd ..
+          mkdir build-feather-spi
+          cd build-feather-spi
+          PICO_BOARD=feather_host_spi cmake ..
+          make remapper
+          cd ..
           mkdir build-waveshare_rp2040_pizero
           cd build-waveshare_rp2040_pizero
           PICO_BOARD=waveshare_rp2040_pizero cmake ..
@@ -76,6 +81,7 @@ jobs:
           mv build-board_v7/remapper_dual_a.uf2 artifacts/remapper_board_v7.uf2
           mv build-board_v8/remapper.uf2 artifacts/remapper_board_v8.uf2
           mv build-feather/remapper.uf2 artifacts/remapper_feather.uf2
+          mv build-feather-spi/remapper.uf2 artifacts/remapper_feather_spi.uf2
           mv build-waveshare_rp2040_pizero/remapper.uf2 artifacts/remapper_waveshare_rp2040_pizero.uf2
           mv build-pico2/remapper.uf2 artifacts/remapper_pico2.uf2
           mv build-pico2/remapper_dual_a.uf2 artifacts/remapper_pico2_dual_a.uf2
