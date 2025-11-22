@@ -68,6 +68,7 @@ target_link_libraries(remapper
     hardware_dma
     hardware_flash
     $<$<STREQUAL:${PICO_BOARD},remapper_v8>:hardware_adc>
+    $<$<STREQUAL:${PICO_BOARD},feather_host_spi>:hardware_spi>
     tinyusb_device
     tinyusb_host
     tinyusb_board
