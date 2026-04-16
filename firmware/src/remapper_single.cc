@@ -59,6 +59,7 @@ static bool reports_received;
  * @param value - Command value (data to write)
  */
 static bool x52_vendor_command(uint8_t dev_addr, uint16_t index, uint16_t value) {
+    printf("x52_vendor_command: dev_addr=%u, index=0x%04x, value=0x%04x\n", dev_addr, index, value);
     return queue_vendor_control_transfer(
         dev_addr,
         X52_VENDOR_REQUEST,  // bRequest = 0x91
@@ -85,6 +86,7 @@ static bool x52_vendor_command(uint8_t dev_addr, uint16_t index, uint16_t value)
  */
 static bool x52_set_mfd_text(uint8_t dev_addr, uint8_t line, const char* text, uint8_t length) {
     if (!text || line > 2) {
+        printf("x52_set_mfd_text: invalid args (text=%p, line=%u)\n", text, line);
         return false;
     }
     
@@ -92,10 +94,13 @@ static bool x52_set_mfd_text(uint8_t dev_addr, uint8_t line, const char* text, u
         length = 16;
     }
     
+    printf("x52_set_mfd_text: dev_addr=%u, line=%u, text='%s', length=%u\n", dev_addr, line, text, length);
+    
     const uint16_t line_map[3] = { X52_MFD_LINE1, X52_MFD_LINE2, X52_MFD_LINE3 };
     uint16_t line_index = line_map[line];
     
     // 1. Clear the line first
+    printf("x52_set_mfd_text: clearing line %u\n", line);
     x52_vendor_command(dev_addr, line_index | X52_MFD_CLEAR_LINE, 0);
     
     // 2. Pad text with spaces to 16 chars
@@ -105,11 +110,13 @@ static bool x52_set_mfd_text(uint8_t dev_addr, uint8_t line, const char* text, u
     }
     
     // 3. Write text in 2-character chunks
+    printf("x52_set_mfd_text: writing %u character pairs\n", 8);
     for (int i = 0; i < 16; i += 2) {
         uint16_t value = (padded[i + 1] << 8) | padded[i];
         x52_vendor_command(dev_addr, line_index | X52_MFD_WRITE_LINE, value);
     }
     
+    printf("x52_set_mfd_text: complete\n");
     return true;
 }
 

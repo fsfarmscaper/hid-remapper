@@ -45,6 +45,9 @@ bool queue_vendor_control_transfer(
         return false;
     }
     
+    printf("queue_vendor_control: dev_addr=%u, bRequest=0x%02x, wValue=0x%04x, wIndex=0x%04x, wLength=%u\n", 
+           dev_addr, bRequest, wValue, wIndex, wLength);
+    
     vendor_control_queue[vcq_tail].dev_addr = dev_addr;
     vendor_control_queue[vcq_tail].setup = {
         .bmRequestType_bit = {
@@ -65,12 +68,16 @@ bool queue_vendor_control_transfer(
     vcq_tail = (vcq_tail + 1) % VENDOR_CONTROL_BUFSIZE;
     vcq_items++;
     
+    printf("vendor_control queue: %d items queued\n", vcq_items);
     return true;
 }
 
 void process_vendor_control_transfers() {
     if ((vcq_items > 0) && vendor_control_ready_flag) {
         vendor_control_request_t* req = &(vendor_control_queue[vcq_head]);
+        
+        printf("process_vendor_control: sending transfer for dev_addr=%u, wLength=%u\n", 
+               req->dev_addr, req->setup.wLength);
         
         // Build the transfer request using the new tuh_control_xfer API
         tuh_xfer_t xfer = {};
@@ -85,9 +92,12 @@ void process_vendor_control_transfers() {
         
         // Send the control transfer
         if (tuh_control_xfer(&xfer)) {
+            printf("process_vendor_control: transfer submitted successfully\n");
             vendor_control_ready_flag = false;
             vcq_head = (vcq_head + 1) % VENDOR_CONTROL_BUFSIZE;
             vcq_items--;
+        } else {
+            printf("process_vendor_control: tuh_control_xfer failed!\n");
         }
     }
 }
@@ -103,14 +113,21 @@ bool vendor_control_ready() {
 void tuh_xfer_cb(uint8_t daddr, uint8_t ep_addr, xfer_result_t result, uint32_t xferred_bytes) {
     // Only process control transfers (ep_addr == 0)
     if (ep_addr == 0) {
-        if (result == XFER_RESULT_SUCCESS) {
-            printf("Vendor control transfer completed successfully (%lu bytes)\n", xferred_bytes);
-        } else if (result == XFER_RESULT_FAILED) {
-            printf("Vendor control transfer failed\n");
-        } else if (result == XFER_RESULT_STALLED) {
-            printf("Vendor control transfer stalled\n");
-        } else if (result == XFER_RESULT_TIMEOUT) {
-            printf("Vendor control transfer timeout\n");
+        switch (result) {
+            case XFER_RESULT_SUCCESS:
+                printf("tuh_xfer_cb: control transfer completed successfully (%lu bytes)\n", xferred_bytes);
+                break;
+            case XFER_RESULT_FAILED:
+                printf("tuh_xfer_cb: control transfer failed\n");
+                break;
+            case XFER_RESULT_STALLED:
+                printf("tuh_xfer_cb: control transfer stalled\n");
+                break;
+            case XFER_RESULT_TIMEOUT:
+                printf("tuh_xfer_cb: control transfer timeout\n");
+                break;
+            default:
+                printf("tuh_xfer_cb: control transfer result %d\n", result);
         }
         
         vendor_control_ready_flag = true;
