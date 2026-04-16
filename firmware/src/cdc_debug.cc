@@ -11,6 +11,8 @@
  */
 
 #define CDC_DEBUG_BUFFER_SIZE 256
+#define CDC_ITF 0  // Use CDC interface 0
+
 static char cdc_buffer[CDC_DEBUG_BUFFER_SIZE];
 
 /*
@@ -21,10 +23,10 @@ int cdc_debug_printf(const char* fmt, va_list va) {
     // Format the message
     int len = vsnprintf(cdc_buffer, sizeof(cdc_buffer), fmt, va);
     
-    if (len > 0 && tud_cdc_connected()) {
+    if (len > 0 && tud_cdc_n_connected(CDC_ITF)) {
         // Send to CDC if connected
-        uint32_t written = tud_cdc_write(cdc_buffer, len);
-        tud_cdc_write_flush();
+        uint32_t written = tud_cdc_n_write(CDC_ITF, (const void*)cdc_buffer, len);
+        tud_cdc_n_write_flush(CDC_ITF);
         return written;
     }
     
@@ -36,26 +38,27 @@ int cdc_debug_printf(const char* fmt, va_list va) {
  */
 
 void tud_mount_cb(void) {
-    printf("USB Device mounted\n");
+    // Don't use printf here as it might cause recursion during startup
 }
 
 void tud_umount_cb(void) {
-    printf("USB Device unmounted\n");
+    // Device unmounted
 }
 
 void tud_suspend_cb(bool remote_wakeup_en) {
-    printf("USB Device suspended\n");
+    // Device suspended
 }
 
 void tud_resume_cb(void) {
-    printf("USB Device resumed\n");
+    // Device resumed
 }
 
 void tud_cdc_rx_cb(uint8_t itf) {
     // Handle any incoming CDC data if needed
     // For now, we're just using CDC for output only
     uint8_t buf[64];
-    uint32_t count = tud_cdc_read(buf, sizeof(buf));
+    uint32_t count = tud_cdc_n_read(itf, buf, sizeof(buf));
+    (void)count; // Suppress unused variable warning
     // Could implement serial command handling here if desired
 }
 
@@ -63,8 +66,8 @@ void tud_cdc_rx_cb(uint8_t itf) {
  * Call this from your main loop to service CDC
  */
 void cdc_debug_task(void) {
-    if (tud_cdc_connected()) {
+    if (tud_cdc_n_connected(CDC_ITF)) {
         // Process any pending writes
-        tud_cdc_write_flush();
+        tud_cdc_n_write_flush(CDC_ITF);
     }
 }
