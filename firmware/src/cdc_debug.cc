@@ -55,27 +55,10 @@ void cdc_debug_flush(void) {
 
 /*
  * TinyUSB Device Callbacks
+ * 
+ * Note: These are implemented in tinyusb_stuff.cc
+ * We don't redefine them here to avoid linker conflicts
  */
-
-void tud_mount_cb(void) {
-    // Device mounted
-}
-
-void tud_umount_cb(void) {
-    // Device unmounted
-}
-
-void tud_suspend_cb(bool remote_wakeup_en) {
-    // Device suspended
-}
-
-void tud_resume_cb(void) {
-    // Device resumed
-}
-
-void tud_cdc_rx_cb(uint8_t itf) {
-    // Handle any incoming CDC data if needed
-}
 
 /*
  * Call this from your main loop to service CDC
