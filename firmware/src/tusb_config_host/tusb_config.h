@@ -10,6 +10,9 @@
 // Enable TinyUSB debug logging (level 2 = info + warnings)
 #define CFG_TUSB_DEBUG 2
 
+// Redirect debug logging to custom CDC function
+#define CFG_TUSB_DEBUG_PRINTF cdc_debug_printf
+
 // Device-side configuration (for CDC debug console on USB-C to PC)
 #define CFG_TUD_ENDPOINT0_SIZE 64
 #define CFG_TUD_CDC 1

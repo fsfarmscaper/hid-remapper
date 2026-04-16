@@ -76,8 +76,11 @@ target_link_libraries(remapper
     usb_midi_host
 )
 
-pico_enable_stdio_usb(remapper 1)
-pico_enable_stdio_uart(remapper 0)
+# Note: pico_enable_stdio_usb conflicts with explicit TinyUSB host linking
+# The printf() calls in the code won't produce visible output without one of:
+# - A USB-to-UART adapter on GPIO 0/1 (not currently enabled)
+# - Custom TinyUSB device CDC implementation
+# - TinyUSB built-in debug logging (CFG_TUSB_DEBUG enabled in tusb_config_host.h)
 
 pico_set_binary_type(remapper copy_to_ram)
 if(PICO_PLATFORM STREQUAL "rp2040")
