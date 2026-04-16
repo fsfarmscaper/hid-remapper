@@ -10,27 +10,50 @@
  * Redirects printf output to USB CDC for real-time debugging via the USB-C port.
  */
 
-#define CDC_DEBUG_BUFFER_SIZE 256
-#define CDC_ITF 0  // Use CDC interface 0
-
-static char cdc_buffer[CDC_DEBUG_BUFFER_SIZE];
+#define CDC_DEBUG_BUFFER_SIZE 512
+static char cdc_out_buffer[CDC_DEBUG_BUFFER_SIZE];
+static uint32_t cdc_out_pos = 0;
 
 /*
- * Custom printf for CDC - formats output and sends via USB CDC
+ * Custom printf for CDC - buffers output and flushes in main task
  * Called by TinyUSB debug logging framework
  */
 int cdc_debug_printf(const char* fmt, va_list va) {
     // Format the message
-    int len = vsnprintf(cdc_buffer, sizeof(cdc_buffer), fmt, va);
+    int len = vsnprintf(cdc_out_buffer + cdc_out_pos, 
+                        sizeof(cdc_out_buffer) - cdc_out_pos, 
+                        fmt, va);
     
-    if (len > 0 && tud_cdc_n_connected(CDC_ITF)) {
-        // Send to CDC if connected
-        uint32_t written = tud_cdc_n_write(CDC_ITF, (const void*)cdc_buffer, len);
-        tud_cdc_n_write_flush(CDC_ITF);
-        return written;
+    if (len > 0) {
+        cdc_out_pos += len;
+        // Flush if buffer is getting full or if we see a newline
+        if (cdc_out_pos >= sizeof(cdc_out_buffer) - 64 || 
+            (cdc_out_pos > 0 && cdc_out_buffer[cdc_out_pos - 1] == '\n')) {
+            cdc_debug_flush();
+        }
     }
     
     return len;
+}
+
+/*
+ * Flush buffered CDC output
+ */
+void cdc_debug_flush(void) {
+    if (cdc_out_pos > 0 && tud_ready()) {
+        // Try to send the buffer
+        uint32_t available = tud_cdc_write_available();
+        if (available > 0) {
+            uint32_t to_send = (cdc_out_pos < available) ? cdc_out_pos : available;
+            tud_cdc_write(cdc_out_buffer, to_send);
+            
+            // Shift remaining data
+            if (to_send < cdc_out_pos) {
+                memmove(cdc_out_buffer, cdc_out_buffer + to_send, cdc_out_pos - to_send);
+            }
+            cdc_out_pos -= to_send;
+        }
+    }
 }
 
 /*
@@ -38,7 +61,7 @@ int cdc_debug_printf(const char* fmt, va_list va) {
  */
 
 void tud_mount_cb(void) {
-    // Don't use printf here as it might cause recursion during startup
+    // Device mounted
 }
 
 void tud_umount_cb(void) {
@@ -56,18 +79,11 @@ void tud_resume_cb(void) {
 void tud_cdc_rx_cb(uint8_t itf) {
     // Handle any incoming CDC data if needed
     // For now, we're just using CDC for output only
-    uint8_t buf[64];
-    uint32_t count = tud_cdc_n_read(itf, buf, sizeof(buf));
-    (void)count; // Suppress unused variable warning
-    // Could implement serial command handling here if desired
 }
 
 /*
  * Call this from your main loop to service CDC
  */
 void cdc_debug_task(void) {
-    if (tud_cdc_n_connected(CDC_ITF)) {
-        // Process any pending writes
-        tud_cdc_n_write_flush(CDC_ITF);
-    }
+    cdc_debug_flush();
 }
