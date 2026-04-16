@@ -1,53 +1,6 @@
 #include <tusb.h>
 
 #include "pio_usb.h"
-#include /*
- * Send a single X52 vendor command
- * 
- * @param dev_addr - Device address from TinyUSB
- * @param index - Command index (e.g., X52_MFD_LINE1 | X52_MFD_WRITE_LINE)
- * @param value - Command value (data to write)
- */
-static bool x52_vendor_command(uint8_t dev_addr, uint16_t index, uint16_t value) {
-    return queue_vendor_control_transfer(
-        dev_addr,
-        X52_VENDOR_REQUEST,  // bRequest = 0x91
-        value,               // wValue
-        index,               // wIndex
-        NULL,                // no data stage
-        0,                   // no data
-        1000                 // timeout
-    );
-}
-
-/*
- * Clear an X52 MFD line
- * 
- * @param dev_addr - Device address from TinyUSB
- * @param line - Line number (0, 1, or 2)
- */
-static bool x52_clear_line(uint8_t dev_addr, uint8_t line) {
-    const uint16_t line_map[3] = { X52_MFD_LINE1, X52_MFD_LINE2, X52_MFD_LINE3 };
-    if (line > 2) return false;
-    
-    return x52_vendor_command(dev_addr, line_map[line] | X52_MFD_CLEAR_LINE, 0);
-}
-
-/*
- * Send text to X52 MFD line via vendor control
- * 
- * Writes text in 2-character chunks using the X52 protocol:
- * - Clear line first
- * - Write characters in 2-char pairs (packed into 16-bit value)
- * - Pad with spaces to 16 characters
- * 
- * @param dev_addr - Device address from TinyUSB
- * @param line - MFD line number (0, 1, or 2)
- * @param text - Text to display
- * @param length - Length of text string
- */
-static bool x52_set_mfd_text(uint8_t dev_addr, uint8_t line, const char* text, uint8_t length) {_host.h"
-
 #include "pico/platform.h"
 #include "pico/time.h"
 
