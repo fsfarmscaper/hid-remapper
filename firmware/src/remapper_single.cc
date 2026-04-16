@@ -1,6 +1,7 @@
 #include <tusb.h>
 
 #include "pio_usb.h"
+#include "usb_midi_host.h"
 #include "pico/platform.h"
 #include "pico/time.h"
 
