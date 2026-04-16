@@ -77,8 +77,8 @@ void process_vendor_control_transfers() {
             .daddr = req->dev_addr,
             .ep_addr = 0,  // Control endpoint
             .setup = &req->setup,
-            .buffer = req->setup.wLength > 0 ? req->data : NULL,
             .buflen = req->setup.wLength,
+            .buffer = req->setup.wLength > 0 ? req->data : NULL,
             .user_data = NULL,
             .complete_cb = NULL
         };
