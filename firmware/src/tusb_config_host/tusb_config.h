@@ -21,6 +21,9 @@
 #define CFG_TUD_MIDI 0
 #define CFG_TUD_VENDOR 0
 
+#define CFG_TUD_CDC_RX_BUFSIZE 64
+#define CFG_TUD_CDC_TX_BUFSIZE 64
+
 // Host-side configuration (for GPIO PIO-USB on USB-A for X52)
 #define CFG_TUH_ENUMERATION_BUFSIZE 512
 
