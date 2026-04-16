@@ -14,11 +14,7 @@
 
 struct vendor_control_request_t {
     uint8_t dev_addr;
-    uint8_t bRequest;
-    uint16_t wValue;
-    uint16_t wIndex;
-    uint16_t wLength;
-    uint32_t timeout_ms;
+    tusb_control_request_t setup;
     uint8_t data[64];  // XXX: Adjust size if needed for larger transfers
 };
 
@@ -50,11 +46,17 @@ bool queue_vendor_control_transfer(
     }
     
     vendor_control_queue[vcq_tail].dev_addr = dev_addr;
-    vendor_control_queue[vcq_tail].bRequest = bRequest;
-    vendor_control_queue[vcq_tail].wValue = wValue;
-    vendor_control_queue[vcq_tail].wIndex = wIndex;
-    vendor_control_queue[vcq_tail].wLength = wLength;
-    vendor_control_queue[vcq_tail].timeout_ms = timeout_ms;
+    vendor_control_queue[vcq_tail].setup = {
+        .bmRequestType_bit = {
+            .recipient = TUSB_REQ_RCPT_DEVICE,
+            .type = TUSB_REQ_TYPE_VENDOR,
+            .direction = TUSB_DIR_OUT  // Host to Device (vendor OUT request)
+        },
+        .bRequest = bRequest,
+        .wValue = wValue,
+        .wIndex = wIndex,
+        .wLength = wLength
+    };
     
     if (data != NULL && wLength > 0) {
         memcpy(vendor_control_queue[vcq_tail].data, data, wLength);
@@ -70,22 +72,19 @@ void process_vendor_control_transfers() {
     if ((vcq_items > 0) && vendor_control_ready_flag) {
         vendor_control_request_t* req = &(vendor_control_queue[vcq_head]);
         
-        // Build the control request
-        tusb_control_request_t ctrl_req = {
-            .bmRequestType_bit = {
-                .recipient = TUSB_REQ_RCPT_DEVICE,
-                .type = TUSB_REQ_TYPE_VENDOR,
-                .direction = TUSB_DIR_OUT  // Host to Device (vendor OUT request)
-            },
-            .bRequest = req->bRequest,
-            .wValue = req->wValue,
-            .wIndex = req->wIndex,
-            .wLength = req->wLength
+        // Build the transfer request using the new tuh_control_xfer API
+        tuh_xfer_t xfer = {
+            .daddr = req->dev_addr,
+            .ep_addr = 0,  // Control endpoint
+            .setup = &req->setup,
+            .buffer = req->setup.wLength > 0 ? req->data : NULL,
+            .buflen = req->setup.wLength,
+            .user_data = NULL,
+            .complete_cb = NULL
         };
         
         // Send the control transfer
-        // For transfers with data, pass the data pointer; for transfers without data, pass NULL
-        if (tuh_control_xfer(req->dev_addr, &ctrl_req, req->wLength > 0 ? req->data : NULL, req->timeout_ms)) {
+        if (tuh_control_xfer(&xfer)) {
             vendor_control_ready_flag = false;
             vcq_head = (vcq_head + 1) % VENDOR_CONTROL_BUFSIZE;
             vcq_items--;
