@@ -46,6 +46,7 @@ add_executable(remapper
     src/ps_auth.cc
     src/app_driver.cc
     src/xbox.cc
+    $<$<STREQUAL:${PICO_BOARD},feather_host_spi>:src/mcp4251.cc>
 )
 
 if((PICO_BOARD STREQUAL "pico") OR (PICO_BOARD STREQUAL "pico2"))
@@ -68,6 +69,7 @@ target_link_libraries(remapper
     hardware_dma
     hardware_flash
     $<$<STREQUAL:${PICO_BOARD},remapper_v8>:hardware_adc>
+    $<$<STREQUAL:${PICO_BOARD},feather_host_spi>:hardware_spi>
     tinyusb_device
     tinyusb_host
     tinyusb_board

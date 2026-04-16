@@ -24,6 +24,7 @@
 #include "globals.h"
 #include "i2c.h"
 #include "mcp4651.h"
+#include "mcp4251.h"
 #include "our_descriptor.h"
 #include "platform.h"
 #include "remapper.h"
@@ -243,6 +244,9 @@ int main() {
 #ifdef I2C_ENABLED
     our_i2c_init();
 #endif
+#ifdef MCP4251_ENABLED
+    mcp4251_init();
+#endif
 #ifdef ADC_ENABLED
     adc_pins_init();
 #endif
@@ -283,6 +287,9 @@ int main() {
             write_gpio();
 #ifdef MCP4651_ENABLED
             mcp4651_write();
+#endif
+#ifdef MCP4251_ENABLED
+            mcp4251_write();
 #endif
         }
         tud_task();
