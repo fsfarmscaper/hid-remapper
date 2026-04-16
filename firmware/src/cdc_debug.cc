@@ -2,6 +2,7 @@
 
 #include <tusb.h>
 #include <pico/stdio.h>
+#include <pico/stdio/driver.h>
 
 #include "cdc_debug.h"
 
