@@ -1,7 +1,5 @@
 name: build-rp2040
 on:
-  workflow_dispatch:
-  pull_request:
   push:
     paths:
       - 'firmware/**'
@@ -22,11 +20,6 @@ jobs:
           sudo apt install -y --no-install-recommends gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib srecord
       - name: Build
         run: |
-          mkdir build
-          cd build
-          cmake ..
-          make
-          cd ..
           mkdir build-feather
           cd build-feather
           PICO_BOARD=feather_host cmake ..
@@ -38,7 +31,6 @@ jobs:
           make remapper
           cd ..
           mkdir artifacts
-          mv build/*.uf2 artifacts
           mv build-feather/remapper.uf2 artifacts/remapper_feather.uf2
           mv build-feather-spi/remapper.uf2 artifacts/remapper_feather_spi.uf2
         working-directory: ./firmware
