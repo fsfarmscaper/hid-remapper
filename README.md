@@ -69,6 +69,7 @@ The easiest way to compile the firmware is to let GitHub do it for you. This rep
 
 To compile the RP2040 firmware on your machine, use the following steps (details may vary depending on your Linux distribution):
 
+
 ```
 sudo apt install gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib srecord
 git clone https://github.com/jfedor2/hid-remapper.git
