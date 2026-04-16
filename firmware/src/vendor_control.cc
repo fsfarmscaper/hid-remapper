@@ -73,17 +73,15 @@ void process_vendor_control_transfers() {
         vendor_control_request_t* req = &(vendor_control_queue[vcq_head]);
         
         // Build the transfer request using the new tuh_control_xfer API
-        tuh_xfer_t xfer = {
-            .daddr = req->dev_addr,
-            .ep_addr = 0,  // Control endpoint
-            .setup = &req->setup,
-            .user_data = NULL,
-            .complete_cb = NULL
-        };
-        
-        // Set buffer and length
+        tuh_xfer_t xfer = {};
+        xfer.daddr = req->dev_addr;
+        xfer.ep_addr = 0;
+        xfer.setup = &req->setup;
         xfer.buffer = req->setup.wLength > 0 ? req->data : NULL;
         xfer.buflen = req->setup.wLength;
+        // Note: complete_cb is in a union with buffer/buflen, so we don't set it here.
+        // TinyUSB will invoke the global tuh_xfer_cb callback for all transfers.
+        xfer.user_data = NULL;
         
         // Send the control transfer
         if (tuh_control_xfer(&xfer)) {
