@@ -77,11 +77,13 @@ void process_vendor_control_transfers() {
             .daddr = req->dev_addr,
             .ep_addr = 0,  // Control endpoint
             .setup = &req->setup,
-            .buflen = req->setup.wLength,
-            .buffer = req->setup.wLength > 0 ? req->data : NULL,
             .user_data = NULL,
             .complete_cb = NULL
         };
+        
+        // Set buffer and length
+        xfer.buffer = req->setup.wLength > 0 ? req->data : NULL;
+        xfer.buflen = req->setup.wLength;
         
         // Send the control transfer
         if (tuh_control_xfer(&xfer)) {
