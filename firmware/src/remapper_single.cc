@@ -5,6 +5,7 @@
 #include "pico/platform.h"
 #include "pico/time.h"
 
+#include "cdc_debug.h"
 #include "descriptor_parser.h"
 #include "out_report.h"
 #include "remapper.h"
@@ -125,6 +126,10 @@ void read_report(bool* new_report, bool* tick) {
 
     reports_received = false;
     tuh_task();
+    
+    // Service device mode (CDC for debug output)
+    tud_task();
+    cdc_debug_task();
     
     // Process pending vendor control transfers
     process_vendor_control_transfers();

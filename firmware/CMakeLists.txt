@@ -42,6 +42,7 @@ add_executable(remapper
     src/interval_override.cc
     src/out_report.cc
     src/vendor_control.cc
+    src/cdc_debug.cc
     src/tick.cc
     src/activity_led.cc
     src/ps_auth.cc
