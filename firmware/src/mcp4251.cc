@@ -21,7 +21,6 @@ void mcp4251_init() {
     gpio_put(SPI_CS_PIN, true);
 }
 
-
 void mcp4251_write() {
     for (int pot = 0; pot < NDIGIPOTS; pot++) {
         // MCP4x51 16-bit SPI frame: [addr(4) | cmd(2) | data(10)]
