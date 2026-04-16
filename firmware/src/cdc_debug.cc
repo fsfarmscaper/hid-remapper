@@ -1,69 +1,50 @@
-#include <cstdio>
-#include <cstdarg>
 #include <cstring>
+
 #include <tusb.h>
+#include <pico/stdio.h>
+
+#include "cdc_debug.h"
 
 /*
  * CDC Debug Output Handler
- * 
- * Implements TinyUSB device-side CDC for debug logging.
- * Redirects printf output to USB CDC for real-time debugging via the USB-C port.
+ *
+ * Registers a pico-sdk stdio driver that buffers printf output
+ * into a ring buffer. cdc_debug_task() drains the buffer to
+ * USB CDC when a host terminal is connected.
  */
 
-#define CDC_DEBUG_BUFFER_SIZE 2048
-static char cdc_out_buffer[CDC_DEBUG_BUFFER_SIZE];
-static uint32_t cdc_out_pos = 0;
+#define CDC_RING_SIZE 2048
+static char cdc_ring[CDC_RING_SIZE];
+static volatile uint32_t cdc_head = 0;  // write position (producer: printf context)
+static volatile uint32_t cdc_tail = 0;  // read position  (consumer: cdc_debug_task)
 
-// Forward declaration
-void cdc_debug_flush(void);
-
-/*
- * Custom printf for CDC - buffers output
- * Called by TinyUSB debug logging framework
- */
-int cdc_debug_printf(const char* fmt, va_list va) {
-    // Format the message into buffer
-    int len = vsnprintf(cdc_out_buffer + cdc_out_pos, 
-                        sizeof(cdc_out_buffer) - cdc_out_pos, 
-                        fmt, va);
-    
-    if (len > 0) {
-        cdc_out_pos += len;
-        // Flush if buffer is getting full or if we see a newline
-        if (cdc_out_pos >= sizeof(cdc_out_buffer) - 128 || 
-            (cdc_out_pos > 0 && cdc_out_buffer[cdc_out_pos - 1] == '\n')) {
-            cdc_debug_flush();
+static void cdc_out_chars(const char *buf, int len) {
+    for (int i = 0; i < len; i++) {
+        uint32_t next = (cdc_head + 1) % CDC_RING_SIZE;
+        if (next != cdc_tail) {
+            cdc_ring[cdc_head] = buf[i];
+            cdc_head = next;
         }
-    }
-    
-    return len;
-}
-
-/*
- * Flush buffered CDC output
- * In a full implementation, this would send via USB CDC
- * For now, this is a placeholder for the TinyUSB device to handle
- */
-void cdc_debug_flush(void) {
-    // Buffer is maintained for TinyUSB device callbacks to read from
-    // The actual transmission happens in the device task
-    // Reset buffer position to keep recent messages
-    if (cdc_out_pos >= sizeof(cdc_out_buffer) - 128) {
-        cdc_out_pos = 0;
+        // else: ring full, drop character
     }
 }
 
-/*
- * TinyUSB Device Callbacks
- * 
- * Note: These are implemented in tinyusb_stuff.cc
- * We don't redefine them here to avoid linker conflicts
- */
+static stdio_driver_t cdc_stdio;
 
-/*
- * Call this from your main loop to service CDC
- */
+void cdc_debug_init(void) {
+    memset(&cdc_stdio, 0, sizeof(cdc_stdio));
+    cdc_stdio.out_chars = cdc_out_chars;
+    stdio_set_driver_enabled(&cdc_stdio, true);
+}
+
 void cdc_debug_task(void) {
-    // This task processes CDC communications
-    // Output buffering happens in cdc_debug_printf
+    if (!tud_cdc_connected()) return;
+
+    uint32_t avail = tud_cdc_write_available();
+    while (avail > 0 && cdc_tail != cdc_head) {
+        tud_cdc_write_char(cdc_ring[cdc_tail]);
+        cdc_tail = (cdc_tail + 1) % CDC_RING_SIZE;
+        avail--;
+    }
+    tud_cdc_write_flush();
 }

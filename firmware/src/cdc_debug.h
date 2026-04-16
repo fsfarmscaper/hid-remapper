@@ -1,15 +1,13 @@
 #pragma once
 
-#include <cstdarg>
-
 /*
  * CDC Debug Output Handler
- * 
- * Provides USB CDC debug logging via the USB-C device port
+ *
+ * Redirects printf output to USB CDC via a pico-sdk stdio driver.
  */
 
-// Custom printf for CDC - formats and sends output via USB CDC
-int cdc_debug_printf(const char* fmt, va_list va);
+// Initialize CDC stdio driver (call after stdio_init_all)
+void cdc_debug_init(void);
 
-// Call this from main loop to service CDC
+// Drain buffered output to USB CDC (call from main loop after tud_task)
 void cdc_debug_task(void);

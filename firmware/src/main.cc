@@ -18,6 +18,7 @@
 #include <pico/unique_id.h>
 
 #include "activity_led.h"
+#include "cdc_debug.h"
 #include "config.h"
 #include "crc.h"
 #include "descriptor_parser.h"
@@ -255,6 +256,7 @@ int main() {
     extra_init();
     tusb_init();
     stdio_init_all();
+    cdc_debug_init();
 
     tud_sof_isr_set(sof_handler);
 

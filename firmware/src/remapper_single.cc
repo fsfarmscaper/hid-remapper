@@ -11,6 +11,7 @@
 #include "remapper.h"
 #include "tick.h"
 #include "vendor_control.h"
+#include "x52.h"
 
 static bool __no_inline_not_in_flash_func(manual_sof)(repeating_timer_t* rt) {
     pio_usb_host_frame();
@@ -41,85 +42,6 @@ uint32_t get_gpio_valid_pins_mask() {
 }
 
 static bool reports_received;
-
-// X52 vendor command codes (from libx52/libx52/commands.h)
-#define X52_VENDOR_ID 0x06A3
-#define X52_PRODUCT_ID_V1 0x0255      // X52 revision 1
-#define X52_PRODUCT_ID_V2 0x075C      // X52 revision 2 (your device)
-#define X52_VENDOR_REQUEST 0x91       // Main vendor request
-#define X52_MFD_LINE1 0xd1            // MFD Line 1 index
-#define X52_MFD_LINE2 0xd2            // MFD Line 2 index
-#define X52_MFD_LINE3 0xd4            // MFD Line 3 index
-#define X52_MFD_CLEAR_LINE 0x08       // Clear line command
-#define X52_MFD_WRITE_LINE 0x00       // Write line command
-/*
- * Send a single X52 vendor command
- * 
- * @param dev_addr - Device address from TinyUSB
- * @param index - Command index (e.g., X52_MFD_LINE1 | X52_MFD_WRITE_LINE)
- * @param value - Command value (data to write)
- */
-static bool x52_vendor_command(uint8_t dev_addr, uint16_t index, uint16_t value) {
-    printf("x52_vendor_command: dev_addr=%u, index=0x%04x, value=0x%04x\n", dev_addr, index, value);
-    return queue_vendor_control_transfer(
-        dev_addr,
-        X52_VENDOR_REQUEST,  // bRequest = 0x91
-        value,               // wValue
-        index,               // wIndex
-        NULL,                // no data stage
-        0,                   // no data
-        1000                 // timeout
-    );
-}
-
-/*
- * Send text to X52 MFD line via vendor control
- * 
- * Writes text in 2-character chunks using the X52 protocol:
- * - Clear line first
- * - Write characters in 2-char pairs (packed into 16-bit value)
- * - Pad with spaces to 16 characters
- * 
- * @param dev_addr - Device address from TinyUSB
- * @param line - MFD line number (0, 1, or 2)
- * @param text - Text to display
- * @param length - Length of text string
- */
-static bool x52_set_mfd_text(uint8_t dev_addr, uint8_t line, const char* text, uint8_t length) {
-    if (!text || line > 2) {
-        printf("x52_set_mfd_text: invalid args (text=%p, line=%u)\n", text, line);
-        return false;
-    }
-    
-    if (length > 16) {
-        length = 16;
-    }
-    
-    printf("x52_set_mfd_text: dev_addr=%u, line=%u, text='%s', length=%u\n", dev_addr, line, text, length);
-    
-    const uint16_t line_map[3] = { X52_MFD_LINE1, X52_MFD_LINE2, X52_MFD_LINE3 };
-    uint16_t line_index = line_map[line];
-    
-    // 1. Clear the line first
-    printf("x52_set_mfd_text: clearing line %u\n", line);
-    x52_vendor_command(dev_addr, line_index | X52_MFD_CLEAR_LINE, 0);
-    
-    // 2. Pad text with spaces to 16 chars
-    uint8_t padded[16];
-    for (int i = 0; i < 16; i++) {
-        padded[i] = (i < length) ? text[i] : ' ';
-    }
-    
-    // 3. Write text in 2-character chunks
-    printf("x52_set_mfd_text: writing %u character pairs\n", 8);
-    for (int i = 0; i < 16; i += 2) {
-        uint16_t value = (padded[i + 1] << 8) | padded[i];
-        x52_vendor_command(dev_addr, line_index | X52_MFD_WRITE_LINE, value);
-    }
-    
-    printf("x52_set_mfd_text: complete\n");
-    return true;
-}
 
 void read_report(bool* new_report, bool* tick) {
     *tick = get_and_clear_tick_pending();
@@ -168,14 +90,10 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* desc_re
 
     device_connected_callback((uint16_t) (dev_addr << 8) | instance, vid, pid, hub_port);
 
-    // If this is an X52 device, update the MFD display
+    // If this is an X52 device, set MFD brightness
     if (vid == X52_VENDOR_ID && (pid == X52_PRODUCT_ID_V1 || pid == X52_PRODUCT_ID_V2)) {
-        printf("X52 detected (PID: 0x%04X)! Updating MFD...\n", pid);
-        
-        // Display welcome message on MFD
-        x52_set_mfd_text(dev_addr, 0, "Hi from RP2040", 14);
-        x52_set_mfd_text(dev_addr, 1, "Connected", 9);
-        x52_set_mfd_text(dev_addr, 2, "", 0);
+        printf("X52 detected (PID: 0x%04X)! Setting MFD brightness...\n", pid);
+        x52_set_brightness(dev_addr, true, 128);
     }
 
     tuh_hid_receive_report(dev_addr, instance);
