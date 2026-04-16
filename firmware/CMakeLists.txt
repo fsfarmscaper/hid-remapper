@@ -46,6 +46,7 @@ add_executable(remapper
     src/ps_auth.cc
     src/app_driver.cc
     src/xbox.cc
+    $<$<STREQUAL:${PICO_BOARD},feather_host_spi>:src/mcp4251.cc>
 )
 
 if((PICO_BOARD STREQUAL "pico") OR (PICO_BOARD STREQUAL "pico2"))

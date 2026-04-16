@@ -11,6 +11,13 @@
 #define SPI_ENABLED
 #define MCP4251_ENABLED
 
+#define NDIGIPOTS 2
+
+// SPI0 pins for MCP4251
+#define SPI_CS_PIN 5
+#define SPI_SCK_PIN 6
+#define SPI_TX_PIN 7
+
 #define GPIO_VALID_PINS_BASE 0b00111111000000001101111111111111
 
 // On some samples, the xosc can take longer to stabilize than is usual
