@@ -81,7 +81,7 @@ void process_vendor_control_transfers() {
         xfer.buflen = req->setup.wLength;
         // Note: complete_cb is in a union with buffer/buflen, so we don't set it here.
         // TinyUSB will invoke the global tuh_xfer_cb callback for all transfers.
-        xfer.user_data = NULL;
+        xfer.user_data = 0;
         
         // Send the control transfer
         if (tuh_control_xfer(&xfer)) {
