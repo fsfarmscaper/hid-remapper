@@ -51,17 +51,14 @@ bool queue_vendor_control_transfer(
     }
     
     vendor_control_queue[vcq_tail].dev_addr = dev_addr;
-    vendor_control_queue[vcq_tail].setup = {
-        .bmRequestType_bit = {
-            .recipient = TUSB_REQ_RCPT_DEVICE,
-            .type = TUSB_REQ_TYPE_VENDOR,
-            .direction = TUSB_DIR_HOST_TO_DEVICE
-        },
-        .bRequest = bRequest,
-        .wValue = wValue,
-        .wIndex = wIndex,
-        .wLength = wLength
-    };
+    memset(&vendor_control_queue[vcq_tail].setup, 0, sizeof(tusb_control_request_t));
+    vendor_control_queue[vcq_tail].setup.bmRequestType_bit.recipient = TUSB_REQ_RCPT_DEVICE;
+    vendor_control_queue[vcq_tail].setup.bmRequestType_bit.type = TUSB_REQ_TYPE_VENDOR;
+    vendor_control_queue[vcq_tail].setup.bmRequestType_bit.direction = TUSB_DIR_OUT;
+    vendor_control_queue[vcq_tail].setup.bRequest = bRequest;
+    vendor_control_queue[vcq_tail].setup.wValue = wValue;
+    vendor_control_queue[vcq_tail].setup.wIndex = wIndex;
+    vendor_control_queue[vcq_tail].setup.wLength = wLength;
     
     if (data != NULL && wLength > 0) {
         memcpy(vendor_control_queue[vcq_tail].data, data, wLength);
