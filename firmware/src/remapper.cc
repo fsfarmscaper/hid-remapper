@@ -9,6 +9,8 @@
 #include <unordered_set>
 #include <vector>
 
+#include <tusb.h>
+
 #include "config.h"
 #include "crc.h"
 #include "descriptor_parser.h"
@@ -2022,7 +2024,11 @@ void parse_our_descriptor() {
 }
 
 void print_stats() {
+#if CFG_TUD_CDC
+    printf("rx:%lu tx:%lu proc_us:%lu\n", reports_received, reports_sent, processing_time);
+#else
     printf("%lu %lu %lu\n", reports_received, reports_sent, processing_time);
+#endif
     reports_received = 0;
     reports_sent = 0;
     processing_time = 0;

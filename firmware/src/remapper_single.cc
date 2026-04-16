@@ -72,7 +72,9 @@ void descriptor_received_callback(uint16_t vendor_id, uint16_t product_id, const
 }
 
 void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* desc_report, uint16_t desc_len) {
+#if CFG_TUD_CDC
     printf("tuh_hid_mount_cb\n");
+#endif
 
     uint8_t hub_addr;
     uint8_t hub_port;
@@ -92,7 +94,10 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* desc_re
 
     // If this is an X52 device, set MFD brightness
     if (vid == X52_VENDOR_ID && (pid == X52_PRODUCT_ID_V1 || pid == X52_PRODUCT_ID_V2)) {
-        printf("X52 detected (PID: 0x%04X)! Setting MFD brightness...\n", pid);
+        #if CFG_TUD_CDC
+            printf("X52 detected (PID: 0x%04X)! Setting MFD brightness...\n", pid);
+        #endif
+
         x52_set_brightness(dev_addr, true, 128);
     }
 
@@ -104,7 +109,9 @@ void umount_callback(uint8_t dev_addr, uint8_t instance) {
 }
 
 void tuh_hid_umount_cb(uint8_t dev_addr, uint8_t instance) {
+#if CFG_TUD_CDC
     printf("tuh_hid_umount_cb\n");
+#endif
     umount_callback(dev_addr, instance);
 }
 

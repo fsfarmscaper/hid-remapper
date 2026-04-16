@@ -1,6 +1,8 @@
-#include <cstring>
-
 #include <tusb.h>
+
+#if CFG_TUD_CDC
+
+#include <cstring>
 #include <pico/stdio.h>
 #include <pico/stdio/driver.h>
 
@@ -49,3 +51,5 @@ void cdc_debug_task(void) {
     }
     tud_cdc_write_flush();
 }
+
+#endif // CFG_TUD_CDC

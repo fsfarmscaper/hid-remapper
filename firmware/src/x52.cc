@@ -1,5 +1,7 @@
 #include <cstdio>
 
+#include <tusb.h>
+
 #include "vendor_control.h"
 #include "x52.h"
 
@@ -40,7 +42,9 @@
 #define X52_BLINK_OFF 0x50
 
 bool x52_vendor_command(uint8_t dev_addr, uint16_t index, uint16_t value) {
+#if CFG_TUD_CDC
     printf("x52_vendor_command: dev_addr=%u, index=0x%04x, value=0x%04x\n", dev_addr, index, value);
+#endif
     return queue_vendor_control_transfer(
         dev_addr,
         X52_VENDOR_REQUEST,  // bRequest = 0x91
@@ -54,7 +58,9 @@ bool x52_vendor_command(uint8_t dev_addr, uint16_t index, uint16_t value) {
 
 bool x52_set_mfd_text(uint8_t dev_addr, uint8_t line, const char* text, uint8_t length) {
     if (!text || line > 2) {
+#if CFG_TUD_CDC
         printf("x52_set_mfd_text: invalid args (text=%p, line=%u)\n", text, line);
+#endif
         return false;
     }
 
@@ -62,7 +68,9 @@ bool x52_set_mfd_text(uint8_t dev_addr, uint8_t line, const char* text, uint8_t 
         length = 16;
     }
 
+#if CFG_TUD_CDC
     printf("x52_set_mfd_text: dev_addr=%u, line=%u, text='%s', length=%u\n", dev_addr, line, text, length);
+#endif
 
     const uint16_t line_map[3] = { X52_MFD_LINE1, X52_MFD_LINE2, X52_MFD_LINE3 };
     uint16_t line_index = line_map[line];

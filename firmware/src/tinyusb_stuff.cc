@@ -32,6 +32,22 @@
 #include "platform.h"
 #include "remapper.h"
 
+// CDC descriptor helpers — compile out when CFG_TUD_CDC == 0
+#if CFG_TUD_CDC
+#define CDC_ITF_COUNT     2   // ACM + Data
+#define CDC_DESC_TOTAL    TUD_CDC_DESC_LEN
+#define CDC_DESCRIPTOR()  TUD_CDC_DESCRIPTOR(2, 3, 0x84, 8, 0x05, 0x85, 64)
+#define CDC_STRING_DESC   "CDC Debug",
+#else
+#define CDC_ITF_COUNT     0
+#define CDC_DESC_TOTAL    0
+#define CDC_DESCRIPTOR()
+#define CDC_STRING_DESC
+#endif
+
+#define HID_ITF_COUNT     2
+#define TOTAL_ITF_COUNT   (HID_ITF_COUNT + CDC_ITF_COUNT)
+
 // These IDs are bogus. If you want to distribute any hardware using this,
 // you will have to get real ones.
 #define USB_VID 0xCAFE
@@ -58,45 +74,45 @@ tusb_desc_device_t desc_device = {
 };
 
 const uint8_t configuration_descriptor0[] = {
-    TUD_CONFIG_DESCRIPTOR(1, 4, 0, TUD_CONFIG_DESC_LEN + TUD_HID_DESC_LEN + TUD_HID_DESC_LEN + TUD_CDC_DESC_LEN, TUSB_DESC_CONFIG_ATT_REMOTE_WAKEUP, 100),
+    TUD_CONFIG_DESCRIPTOR(1, TOTAL_ITF_COUNT, 0, TUD_CONFIG_DESC_LEN + TUD_HID_DESC_LEN + TUD_HID_DESC_LEN + CDC_DESC_TOTAL, TUSB_DESC_CONFIG_ATT_REMOTE_WAKEUP, 100),
     TUD_HID_DESCRIPTOR(0, 0, HID_ITF_PROTOCOL_KEYBOARD, our_descriptors[0].descriptor_length, 0x81, CFG_TUD_HID_EP_BUFSIZE, 1),
     TUD_HID_DESCRIPTOR(1, 0, HID_ITF_PROTOCOL_NONE, config_report_descriptor_length, 0x83, CFG_TUD_HID_EP_BUFSIZE, 1),
-    TUD_CDC_DESCRIPTOR(2, 3, 0x84, 8, 0x05, 0x85, 64),
+    CDC_DESCRIPTOR()
 };
 
 const uint8_t configuration_descriptor1[] = {
-    TUD_CONFIG_DESCRIPTOR(1, 4, 0, TUD_CONFIG_DESC_LEN + TUD_HID_DESC_LEN + TUD_HID_DESC_LEN + TUD_CDC_DESC_LEN, TUSB_DESC_CONFIG_ATT_REMOTE_WAKEUP, 100),
+    TUD_CONFIG_DESCRIPTOR(1, TOTAL_ITF_COUNT, 0, TUD_CONFIG_DESC_LEN + TUD_HID_DESC_LEN + TUD_HID_DESC_LEN + CDC_DESC_TOTAL, TUSB_DESC_CONFIG_ATT_REMOTE_WAKEUP, 100),
     TUD_HID_DESCRIPTOR(0, 0, HID_ITF_PROTOCOL_KEYBOARD, our_descriptors[1].descriptor_length, 0x81, CFG_TUD_HID_EP_BUFSIZE, 1),
     TUD_HID_DESCRIPTOR(1, 0, HID_ITF_PROTOCOL_NONE, config_report_descriptor_length, 0x83, CFG_TUD_HID_EP_BUFSIZE, 1),
-    TUD_CDC_DESCRIPTOR(2, 3, 0x84, 8, 0x05, 0x85, 64),
+    CDC_DESCRIPTOR()
 };
 
 const uint8_t configuration_descriptor2[] = {
-    TUD_CONFIG_DESCRIPTOR(1, 4, 0, TUD_CONFIG_DESC_LEN + TUD_HID_INOUT_DESC_LEN + TUD_HID_DESC_LEN + TUD_CDC_DESC_LEN, 0, 100),
+    TUD_CONFIG_DESCRIPTOR(1, TOTAL_ITF_COUNT, 0, TUD_CONFIG_DESC_LEN + TUD_HID_INOUT_DESC_LEN + TUD_HID_DESC_LEN + CDC_DESC_TOTAL, 0, 100),
     TUD_HID_INOUT_DESCRIPTOR(0, 0, HID_ITF_PROTOCOL_NONE, our_descriptors[2].descriptor_length, 0x02, 0x81, CFG_TUD_HID_EP_BUFSIZE, 1),
     TUD_HID_DESCRIPTOR(1, 0, HID_ITF_PROTOCOL_NONE, config_report_descriptor_length, 0x83, CFG_TUD_HID_EP_BUFSIZE, 1),
-    TUD_CDC_DESCRIPTOR(2, 3, 0x84, 8, 0x05, 0x85, 64),
+    CDC_DESCRIPTOR()
 };
 
 const uint8_t configuration_descriptor3[] = {
-    TUD_CONFIG_DESCRIPTOR(1, 4, 0, TUD_CONFIG_DESC_LEN + TUD_HID_DESC_LEN + TUD_HID_DESC_LEN + TUD_CDC_DESC_LEN, 0, 100),
+    TUD_CONFIG_DESCRIPTOR(1, TOTAL_ITF_COUNT, 0, TUD_CONFIG_DESC_LEN + TUD_HID_DESC_LEN + TUD_HID_DESC_LEN + CDC_DESC_TOTAL, 0, 100),
     TUD_HID_DESCRIPTOR(0, 0, HID_ITF_PROTOCOL_NONE, our_descriptors[3].descriptor_length, 0x81, CFG_TUD_HID_EP_BUFSIZE, 1),
     TUD_HID_DESCRIPTOR(1, 0, HID_ITF_PROTOCOL_NONE, config_report_descriptor_length, 0x83, CFG_TUD_HID_EP_BUFSIZE, 1),
-    TUD_CDC_DESCRIPTOR(2, 3, 0x84, 8, 0x05, 0x85, 64),
+    CDC_DESCRIPTOR()
 };
 
 const uint8_t configuration_descriptor4[] = {
-    TUD_CONFIG_DESCRIPTOR(1, 4, 0, TUD_CONFIG_DESC_LEN + TUD_HID_INOUT_DESC_LEN + TUD_HID_DESC_LEN + TUD_CDC_DESC_LEN, 0, 100),
+    TUD_CONFIG_DESCRIPTOR(1, TOTAL_ITF_COUNT, 0, TUD_CONFIG_DESC_LEN + TUD_HID_INOUT_DESC_LEN + TUD_HID_DESC_LEN + CDC_DESC_TOTAL, 0, 100),
     TUD_HID_INOUT_DESCRIPTOR(0, 0, HID_ITF_PROTOCOL_NONE, our_descriptors[4].descriptor_length, 0x02, 0x81, CFG_TUD_HID_EP_BUFSIZE, 1),
     TUD_HID_DESCRIPTOR(1, 0, HID_ITF_PROTOCOL_NONE, config_report_descriptor_length, 0x83, CFG_TUD_HID_EP_BUFSIZE, 1),
-    TUD_CDC_DESCRIPTOR(2, 3, 0x84, 8, 0x05, 0x85, 64),
+    CDC_DESCRIPTOR()
 };
 
 const uint8_t configuration_descriptor5[] = {
-    TUD_CONFIG_DESCRIPTOR(1, 4, 0, TUD_CONFIG_DESC_LEN + TUD_HID_DESC_LEN + TUD_HID_DESC_LEN + TUD_CDC_DESC_LEN, 0, 100),
+    TUD_CONFIG_DESCRIPTOR(1, TOTAL_ITF_COUNT, 0, TUD_CONFIG_DESC_LEN + TUD_HID_DESC_LEN + TUD_HID_DESC_LEN + CDC_DESC_TOTAL, 0, 100),
     TUD_HID_DESCRIPTOR(0, 0, HID_ITF_PROTOCOL_NONE, our_descriptors[5].descriptor_length, 0x81, CFG_TUD_HID_EP_BUFSIZE, 1),
     TUD_HID_DESCRIPTOR(1, 0, HID_ITF_PROTOCOL_NONE, config_report_descriptor_length, 0x83, CFG_TUD_HID_EP_BUFSIZE, 1),
-    TUD_CDC_DESCRIPTOR(2, 3, 0x84, 8, 0x05, 0x85, 64),
+    CDC_DESCRIPTOR()
 };
 
 const uint8_t* configuration_descriptors[] = {
@@ -116,7 +132,7 @@ char const* string_desc_arr[] = {
     "RP2040",  // 1: Manufacturer
 #endif
     "HID Remapper XXXX",  // 2: Product
-    "CDC Debug",  // 3: CDC interface
+    CDC_STRING_DESC
 };
 
 // Invoked when received GET DEVICE DESCRIPTOR
