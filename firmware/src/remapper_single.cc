@@ -171,8 +171,13 @@ void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t cons
         x52_update_ht_display(x52_dev_addr, last_ht_x, ht_paused);
     }
 
-    // X52 button: short press = reset, long press = pause toggle
-    if (dev_addr == x52_dev_addr && len > X52_BTN_BYTE) {
+    // Process X52 device reports
+    if (dev_addr == x52_dev_addr) {
+
+#if CFG_TUD_CDC
+        printf("tuh_hid_report_received_cb: dev_addr=%u, len=%u\n", dev_addr, len);
+#endif
+
         // MFD brightness wheel (byte 8, 0-255 -> 0-128)
         if (len > X52_BRIGHTNESS_BYTE) {
             uint8_t brightness = report[X52_BRIGHTNESS_BYTE] >> 1;
@@ -183,38 +188,39 @@ void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t cons
         }
 
         if (ht_dev_addr != 0) {
-        bool btn_now = (report[X52_BTN_BYTE] & X52_BTN_MASK) != 0;
-        uint32_t now = to_ms_since_boot(get_absolute_time());
+            // X52 button: short press = reset, long press = pause toggle
+            bool btn_now = (report[X52_BTN_BYTE] & X52_BTN_MASK) != 0;
+            uint32_t now = to_ms_since_boot(get_absolute_time());
 
-        if (btn_now && !x52_btn_prev) {
-            // Button just pressed — start timer
-            x52_btn_press_time = now;
-            x52_btn_handled = false;
-        }
-        else if (btn_now && !x52_btn_handled) {
-            // Button held — check for long press
-            if (now - x52_btn_press_time >= LONG_PRESS_MS) {
-                ht_paused = !ht_paused;
-                uint8_t cmd = HT_PAUSE_CMD;
-                queue_out_report((uint16_t)(ht_dev_addr << 8) | ht_instance, HT_REPORT_ID, &cmd, 1);
-                x52_btn_handled = true;
-                #if CFG_TUD_CDC
-                    printf("X52 btn long -> HT %s\n", ht_paused ? "paused" : "resumed");
-                #endif
-                x52_update_ht_display(x52_dev_addr, last_ht_x, ht_paused);
+            if (btn_now && !x52_btn_prev) {
+                // Button just pressed — start timer
+                x52_btn_press_time = now;
+                x52_btn_handled = false;
             }
-        }
-        else if (!btn_now && x52_btn_prev) {
-            // Button released — short press if not already handled
-            if (!x52_btn_handled) {
-                uint8_t cmd = HT_RESET_CMD;
-                queue_out_report((uint16_t)(ht_dev_addr << 8) | ht_instance, HT_REPORT_ID, &cmd, 1);
-                #if CFG_TUD_CDC
-                    printf("X52 btn short -> HT reset\n");
-                #endif
+            else if (btn_now && !x52_btn_handled) {
+                // Button held — check for long press
+                if (now - x52_btn_press_time >= LONG_PRESS_MS) {
+                    ht_paused = !ht_paused;
+                    uint8_t cmd = HT_PAUSE_CMD;
+                    queue_out_report((uint16_t)(ht_dev_addr << 8) | ht_instance, HT_REPORT_ID, &cmd, 1);
+                    x52_btn_handled = true;
+                    #if CFG_TUD_CDC
+                        printf("X52 btn long -> HT %s\n", ht_paused ? "paused" : "resumed");
+                    #endif
+                    x52_update_ht_display(x52_dev_addr, last_ht_x, ht_paused);
+                }
             }
-        }
-        x52_btn_prev = btn_now;
+            else if (!btn_now && x52_btn_prev) {
+                // Button released — short press if not already handled
+                if (!x52_btn_handled) {
+                    uint8_t cmd = HT_RESET_CMD;
+                    queue_out_report((uint16_t)(ht_dev_addr << 8) | ht_instance, HT_REPORT_ID, &cmd, 1);
+                    #if CFG_TUD_CDC
+                        printf("X52 btn short -> HT reset\n");
+                    #endif
+                }
+            }
+            x52_btn_prev = btn_now;
         } // ht_dev_addr != 0
     }
 

@@ -190,6 +190,10 @@ void x52_update_ht_display(uint8_t dev_addr, int16_t headX, bool paused) {
     if (now - ht_mfd_last_update < X52_HT_MFD_UPDATE_MS) return;
     ht_mfd_last_update = now;
 
+#if CFG_TUD_CDC
+    printf("x52_update_ht_display: dev_addr=%u, headX=%d, paused=%s\n", dev_addr, headX, paused ? "true" : "false");
+#endif
+
     if (paused) {
         mfd_set_line_cached(dev_addr, 0, "  Head Tracker  ");
         mfd_set_line_cached(dev_addr, 1, "  -- PAUSED --  ");
