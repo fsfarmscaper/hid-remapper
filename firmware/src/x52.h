@@ -64,4 +64,11 @@ bool x52_set_time(uint8_t dev_addr, uint8_t hour, uint8_t minute, bool h24);
 // Set secondary clock offset (clock 2 or 3, offset in minutes from clock 1)
 bool x52_set_clock_offset(uint8_t dev_addr, uint8_t clock, int16_t offset_minutes, bool h24);
 
+// Head tracker MFD display
+// Update rate-limited display showing X axis bar graph, or PAUSED state
+void x52_update_ht_display(uint8_t dev_addr, int16_t headX, bool paused);
+
+// Initialize MFD clocks: clock 1 = 00:00
+void x52_init_clocks(uint8_t dev_addr);
+
 #endif

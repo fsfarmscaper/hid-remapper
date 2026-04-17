@@ -1,6 +1,7 @@
 #include <cstdio>
 
 #include <tusb.h>
+#include "pico/time.h"
 
 #include "vendor_control.h"
 #include "x52.h"
@@ -157,4 +158,59 @@ bool x52_set_clock_offset(uint8_t dev_addr, uint8_t clock, int16_t offset_minute
 
     uint16_t value = ((h24 ? 1 : 0) << 15) | (negative << 10) | (offset & 0x3FF);
     return x52_vendor_command(dev_addr, index, value);
+}
+
+// --- Head Tracker MFD Display ---
+
+#define X52_HT_MFD_UPDATE_MS 100
+
+static uint32_t ht_mfd_last_update = 0;
+static char mfd_cache[3][17] = { "", "", "" }; // Cached line contents
+
+static void mfd_set_line_cached(uint8_t dev_addr, uint8_t line, const char* text) {
+    if (memcmp(mfd_cache[line], text, 16) == 0) return; // No change, skip
+    memcpy(mfd_cache[line], text, 16);
+    mfd_cache[line][16] = '\0';
+    x52_set_mfd_text(dev_addr, line, text, 16);
+}
+
+static void build_mfd_bar(char* buf, int16_t value, int16_t range) {
+    int pos = (int)((((float)value / range) + 1.0f) * 7.5f + 0.5f);
+    if (pos < 0) pos = 0;
+    if (pos > 15) pos = 15;
+    static const char blank_bar[] = "--------+-------";
+    memcpy(buf, blank_bar, 16);
+    buf[pos] = 'X'; // value position (overwrites center if at 0)
+}
+
+void x52_update_ht_display(uint8_t dev_addr, int16_t headX, bool paused) {
+    if (dev_addr == 0) return;
+
+    uint32_t now = to_ms_since_boot(get_absolute_time());
+    if (now - ht_mfd_last_update < X52_HT_MFD_UPDATE_MS) return;
+    ht_mfd_last_update = now;
+
+    if (paused) {
+        mfd_set_line_cached(dev_addr, 0, "  Head Tracker  ");
+        mfd_set_line_cached(dev_addr, 1, "  -- PAUSED --  ");
+        mfd_set_line_cached(dev_addr, 2, "  Long-Press D  ");
+        return;
+    }
+
+    mfd_set_line_cached(dev_addr, 0, " Head Tracker X ");
+
+    char bar[17];
+    build_mfd_bar(bar, headX, 512);
+    bar[16] = '\0';
+    mfd_set_line_cached(dev_addr, 1, bar);
+
+    char val[17];
+    snprintf(val, 17, "     %4d       ", headX);
+    mfd_set_line_cached(dev_addr, 2, val);
+}
+
+// --- Uptime Clock ---
+
+void x52_init_clocks(uint8_t dev_addr) {
+    x52_set_time(dev_addr, 0, 0, true);
 }

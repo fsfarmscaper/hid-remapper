@@ -13,6 +13,31 @@
 #include "vendor_control.h"
 #include "x52.h"
 
+// Head Tracker (Arduino Nano ESP32)
+#define HT_VENDOR_ID   0x2341
+#define HT_PRODUCT_ID  0x8070
+#define HT_RESET_CMD   0x01
+#define HT_PAUSE_CMD   0x02
+#define HT_REPORT_ID   2
+
+// X52 button detection (byte 9, bit 6 = HID Button 15)
+#define X52_BTN_BYTE   9
+#define X52_BTN_MASK   0x40
+#define LONG_PRESS_MS  1000
+
+// X52 MFD brightness wheel (byte 8, 0-255)
+#define X52_BRIGHTNESS_BYTE 8
+
+static uint8_t ht_dev_addr = 0;
+static uint8_t ht_instance = 0;
+static uint8_t x52_dev_addr = 0;
+static bool x52_btn_prev = false;
+static uint32_t x52_btn_press_time = 0;
+static bool x52_btn_handled = false;
+static bool ht_paused = false;
+static int16_t last_ht_x = 0;
+static uint8_t last_mfd_brightness = 0xFF; // Invalid initial to force first update
+
 static bool __no_inline_not_in_flash_func(manual_sof)(repeating_timer_t* rt) {
     pio_usb_host_frame();
     set_tick_pending();
@@ -92,13 +117,23 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* desc_re
 
     device_connected_callback((uint16_t) (dev_addr << 8) | instance, vid, pid, hub_port);
 
-    // If this is an X52 device, set MFD brightness
+    // If this is an X52 device, save address
     if (vid == X52_VENDOR_ID && (pid == X52_PRODUCT_ID_V1 || pid == X52_PRODUCT_ID_V2)) {
+        x52_dev_addr = dev_addr;
+        last_mfd_brightness = 0xFF; // Force brightness update on first report
+        x52_init_clocks(x52_dev_addr);
         #if CFG_TUD_CDC
-            printf("X52 detected (PID: 0x%04X)! Setting MFD brightness...\n", pid);
+            printf("X52 detected (PID: 0x%04X)\n", pid);
         #endif
+    }
 
-        x52_set_brightness(dev_addr, true, 128);
+    // Head Tracker detection
+    if (vid == HT_VENDOR_ID && pid == HT_PRODUCT_ID) {
+        ht_dev_addr = dev_addr;
+        ht_instance = instance;
+        #if CFG_TUD_CDC
+            printf("Head Tracker detected (addr=%d, inst=%d)\n", ht_dev_addr, ht_instance);
+        #endif
     }
 
     tuh_hid_receive_report(dev_addr, instance);
@@ -112,6 +147,8 @@ void tuh_hid_umount_cb(uint8_t dev_addr, uint8_t instance) {
 #if CFG_TUD_CDC
     printf("tuh_hid_umount_cb\n");
 #endif
+    if (dev_addr == ht_dev_addr) { ht_dev_addr = 0; }
+    if (dev_addr == x52_dev_addr) { x52_dev_addr = 0; x52_btn_prev = false; }
     umount_callback(dev_addr, instance);
 }
 
@@ -125,6 +162,61 @@ void report_received_callback(uint8_t dev_addr, uint8_t instance, uint8_t const*
 
 void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* report, uint16_t len) {
     report_received_callback(dev_addr, instance, report, len);
+
+    // Extract head tracker X for MFD display
+    if (dev_addr == ht_dev_addr && len >= 12) {
+        uint16_t twoBytes = report[2] | (report[3] << 8);
+        uint16_t raw = twoBytes & 0x03FF;
+        last_ht_x = (raw > 511) ? (int16_t)raw - 1024 : (int16_t)raw;
+        x52_update_ht_display(x52_dev_addr, last_ht_x, ht_paused);
+    }
+
+    // X52 button: short press = reset, long press = pause toggle
+    if (dev_addr == x52_dev_addr && len > X52_BTN_BYTE) {
+        // MFD brightness wheel (byte 8, 0-255 -> 0-128)
+        if (len > X52_BRIGHTNESS_BYTE) {
+            uint8_t brightness = report[X52_BRIGHTNESS_BYTE] >> 1;
+            if (brightness != last_mfd_brightness) {
+                last_mfd_brightness = brightness;
+                x52_set_brightness(x52_dev_addr, true, brightness);
+            }
+        }
+
+        if (ht_dev_addr != 0) {
+        bool btn_now = (report[X52_BTN_BYTE] & X52_BTN_MASK) != 0;
+        uint32_t now = to_ms_since_boot(get_absolute_time());
+
+        if (btn_now && !x52_btn_prev) {
+            // Button just pressed — start timer
+            x52_btn_press_time = now;
+            x52_btn_handled = false;
+        }
+        else if (btn_now && !x52_btn_handled) {
+            // Button held — check for long press
+            if (now - x52_btn_press_time >= LONG_PRESS_MS) {
+                ht_paused = !ht_paused;
+                uint8_t cmd = HT_PAUSE_CMD;
+                queue_out_report((uint16_t)(ht_dev_addr << 8) | ht_instance, HT_REPORT_ID, &cmd, 1);
+                x52_btn_handled = true;
+                #if CFG_TUD_CDC
+                    printf("X52 btn long -> HT %s\n", ht_paused ? "paused" : "resumed");
+                #endif
+                x52_update_ht_display(x52_dev_addr, last_ht_x, ht_paused);
+            }
+        }
+        else if (!btn_now && x52_btn_prev) {
+            // Button released — short press if not already handled
+            if (!x52_btn_handled) {
+                uint8_t cmd = HT_RESET_CMD;
+                queue_out_report((uint16_t)(ht_dev_addr << 8) | ht_instance, HT_REPORT_ID, &cmd, 1);
+                #if CFG_TUD_CDC
+                    printf("X52 btn short -> HT reset\n");
+                #endif
+            }
+        }
+        x52_btn_prev = btn_now;
+        } // ht_dev_addr != 0
+    }
 
     tuh_hid_receive_report(dev_addr, instance);
 }
