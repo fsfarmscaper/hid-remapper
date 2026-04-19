@@ -170,18 +170,18 @@ void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t cons
     report_received_callback(dev_addr, instance, report, len);
 
     // Extract head tracker X for MFD display
-    if (dev_addr == ht_dev_addr && len >= 4) {
+    if (dev_addr == ht_dev_addr && len >= 8) {
         // 1. Print Raw Bytes
-        printf("HT RAW: [%02X][%02X][%02X][%02X]\n", report[0], report[1], report[2], report[3]);
+        // Show 8 bytes so we don't miss the spill-over
+        printf("HT FULL RAW: [%02X][%02X][%02X][%02X][%02X][%02X][%02X][%02X]\n", 
+                report[0], report[1], report[2], report[3], 
+                report[4], report[5], report[6], report[7]);
 
-        // 2. Print every common combination to see which one looks like -511 to 511
-        int16_t le16 = (int16_t)(report[2] | (report[3] << 8)); // Little Endian
-        int16_t be16 = (int16_t)((report[2] << 8) | report[3]); // Big Endian
-        
-        // 10-bit extraction (assuming bit 9 is sign)
-        int16_t signed10 = (le16 << 6) >> 6; 
-        
-        printf("HT Trial: LE=%d | BE=%d | S10=%d\n", le16, be16, signed10);
+        // Interpret as 16-bit integers (both ways)
+        int16_t le_pair = (int16_t)(report[3] | (report[4] << 8));
+        int16_t be_pair = (int16_t)((report[3] << 8) | report[4]);
+
+        printf("Pairs starting at Byte 3: LE_16=%d | BE_16=%d\n", le_pair, be_pair);
 
         // uint16_t twoBytes = report[2] | (report[3] << 8);
         // uint16_t raw = twoBytes & 0x03FF;
@@ -189,10 +189,11 @@ void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t cons
     
         uint8_t raw_byte = report[3];
 
-        // 2. Map 0...255 to -512...511
-        // We multiply by 4 to scale 8-bit to 10-bit range
-        // We subtract 512 to center it
-        int16_t headX_centered = ((int16_t)raw_byte * 4) - 512;
+        // 1. Shift the 0..255 range so that center (128) becomes 0
+        // (128 - 128) * 4 = 0
+        // (0 - 128) * 4 = -512
+        // (255 - 128) * 4 = 508
+        int16_t headX_centered = ((int16_t)raw_byte - 128) * 4;
 
         x52_update_ht_display(x52_dev_addr, headX_centered, ht_paused);
     }
