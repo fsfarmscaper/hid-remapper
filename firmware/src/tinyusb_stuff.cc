@@ -251,3 +251,37 @@ void tud_suspend_cb(bool remote_wakeup_en) {
 void tud_resume_cb() {
     printf("tud_resume_cb\n");
 }
+
+#if CFG_TUH_CDC
+
+// Callback when the ESP32 (as a CDC device) sends data to the RP2040
+void tuh_cdc_rx_cb(uint8_t dev_addr, uint8_t instance) {
+    uint8_t buf[64];
+    uint32_t count = tuh_cdc_read(dev_addr, instance, buf, sizeof(buf));
+
+    // We only print to the PC if the RP2040's own CDC is also active
+    #if CFG_TUD_CDC
+    if (count > 0) {
+        printf("[ESP] "); 
+        for (uint32_t i = 0; i < count; i++) {
+            putchar(buf[i]);
+        }
+        fflush(stdout);
+    }
+    #endif
+
+    // Keep the listener alive
+    tuh_cdc_receive(dev_addr, instance, buf, sizeof(buf), true);
+}
+
+// Kickstart the reading process when the ESP32 CDC interface mounts
+void tuh_cdc_mount_cb(uint8_t dev_addr, uint8_t instance) {
+    uint8_t buf[64];
+    tuh_cdc_receive(dev_addr, instance, buf, sizeof(buf), true);
+    
+    #if CFG_TUD_CDC
+    printf("ESP32 CDC link established (addr %d, inst %d)\n", dev_addr, instance);
+    #endif
+}
+
+#endif // CFG_TUH_CDC
