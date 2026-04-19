@@ -170,7 +170,7 @@ void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t cons
     report_received_callback(dev_addr, instance, report, len);
 
     // Extract head tracker X for MFD display
-    if (dev_addr == ht_dev_addr && len >= 12) {
+    if (dev_addr == ht_dev_addr && len >= 4) {
         // 1. Print Raw Bytes
         printf("HT RAW: [%02X][%02X][%02X][%02X]\n", report[0], report[1], report[2], report[3]);
 
@@ -183,10 +183,18 @@ void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t cons
         
         printf("HT Trial: LE=%d | BE=%d | S10=%d\n", le16, be16, signed10);
 
-        uint16_t twoBytes = report[2] | (report[3] << 8);
-        uint16_t raw = twoBytes & 0x03FF;
-        last_ht_x = (raw > 511) ? (int16_t)raw - 1024 : (int16_t)raw;
-        x52_update_ht_display(x52_dev_addr, last_ht_x, ht_paused);
+        // uint16_t twoBytes = report[2] | (report[3] << 8);
+        // uint16_t raw = twoBytes & 0x03FF;
+        // last_ht_x = (raw > 511) ? (int16_t)raw - 1024 : (int16_t)raw;
+    
+        uint8_t raw_byte = report[3];
+
+        // 2. Map 0...255 to -512...511
+        // We multiply by 4 to scale 8-bit to 10-bit range
+        // We subtract 512 to center it
+        int16_t headX_centered = ((int16_t)raw_byte * 4) - 512;
+
+        x52_update_ht_display(x52_dev_addr, headX_centered, ht_paused);
     }
 
     // Process X52 device reports
