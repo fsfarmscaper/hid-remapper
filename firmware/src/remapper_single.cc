@@ -169,6 +169,11 @@ void report_received_callback(uint8_t dev_addr, uint8_t instance, uint8_t const*
 void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* report, uint16_t len) {
     report_received_callback(dev_addr, instance, report, len);
 
+#if CFG_TUD_CDC
+    printf("tuh_hid_report_received_cb: dev_addr=%u, len=%u\n", dev_addr, len);
+#endif
+
+
     // Extract head tracker X for MFD display
     if (dev_addr == ht_dev_addr && len >= 8) {
         // 1. Print Raw Bytes
@@ -215,23 +220,23 @@ void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t cons
     // Process X52 device reports
     if (dev_addr == x52_dev_addr) {
 
-#if CFG_TUD_CDC
-        printf("tuh_hid_report_received_cb: dev_addr=%u, len=%u\n", dev_addr, len);
+// #if CFG_TUD_CDC
+//         printf("tuh_hid_report_received_cb: dev_addr=%u, len=%u\n", dev_addr, len);
 
 
-        if (!first_run) {
-            for (uint16_t i = 0; i < len; i++) {
-                if (report[i] != last_report_copy[i]) {
-                    // Log which byte changed and its new hex/dec value
-                    printf("Diff at Byte [%d]: %d (0x%02X)\n", i, report[i], report[i]);
-                }
-            }
-        }
+//         if (!first_run) {
+//             for (uint16_t i = 0; i < len; i++) {
+//                 if (report[i] != last_report_copy[i]) {
+//                     // Log which byte changed and its new hex/dec value
+//                     printf("Diff at Byte [%d]: %d (0x%02X)\n", i, report[i], report[i]);
+//                 }
+//             }
+//         }
 
-        // Update the copy for the next comparison
-        memcpy(last_report_copy, report, len);
-        first_run = false;        
-#endif
+//         // Update the copy for the next comparison
+//         memcpy(last_report_copy, report, len);
+//         first_run = false;        
+// #endif
 
         // MFD brightness wheel (byte 7, 0-255 -> 0-128)
         if (len > X52_BRIGHTNESS_BYTE) {
