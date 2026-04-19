@@ -20,11 +20,11 @@
 #define HT_PAUSE_CMD   0x02
 #define HT_REPORT_ID   2
 
-// X52 MFD brightness wheel (byte 9, 0-255)
-#define X52_BRIGHTNESS_BYTE 8
+// X52 MFD brightness wheel (byte 7, 0-255)
+#define X52_BRIGHTNESS_BYTE 7
 
-// X52 button detection (byte 10, bit 6 = HID Button 15)
-#define X52_BTN_BYTE   9
+// X52 button detection (byte 8, bit 6 = HID Button 15)
+#define X52_BTN_BYTE   8
 #define X52_BTN_MASK   0x40
 #define LONG_PRESS_MS  1000
 
