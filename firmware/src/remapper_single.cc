@@ -21,10 +21,10 @@
 #define HT_REPORT_ID   2
 
 // X52 MFD brightness wheel (byte 9, 0-255)
-#define X52_BRIGHTNESS_BYTE 9
+#define X52_BRIGHTNESS_BYTE 8
 
 // X52 button detection (byte 10, bit 6 = HID Button 15)
-#define X52_BTN_BYTE   10
+#define X52_BTN_BYTE   9
 #define X52_BTN_MASK   0x40
 #define LONG_PRESS_MS  1000
 
@@ -38,6 +38,10 @@ static bool x52_btn_handled = false;
 static bool ht_paused = false;
 static int16_t last_ht_x = 0;
 static uint8_t last_mfd_brightness = 0xFF; // Invalid initial to force first update
+
+static uint8_t last_report_copy[64] = {0};
+static bool first_run = true;
+
 
 static bool __no_inline_not_in_flash_func(manual_sof)(repeating_timer_t* rt) {
     pio_usb_host_frame();
@@ -177,6 +181,20 @@ void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t cons
 
 #if CFG_TUD_CDC
         printf("tuh_hid_report_received_cb: dev_addr=%u, len=%u\n", dev_addr, len);
+
+
+        if (!first_run) {
+            for (uint16_t i = 0; i < len; i++) {
+                if (report[i] != last_report_copy[i]) {
+                    // Log which byte changed and its new hex/dec value
+                    printf("Diff at Byte [%d]: %d (0x%02X)\n", i, report[i], report[i]);
+                }
+            }
+        }
+
+        // Update the copy for the next comparison
+        memcpy(last_report_copy, report, len);
+        first_run = false;        
 #endif
 
         // MFD brightness wheel (byte 8, 0-255 -> 0-128)
