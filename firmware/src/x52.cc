@@ -175,6 +175,14 @@ static void mfd_set_line_cached(uint8_t dev_addr, uint8_t line, const char* text
 }
 
 static void build_mfd_bar(char* buf, int16_t value, int16_t range) {
+
+    float ratio = (float)value / (float)range;
+    float scaled = (ratio + 1.0f) * 7.5f;
+    int pos = (int)(scaled + 0.5f);
+
+    // DEBUG PRINT: This tells us if the math is actually reaching 0 or 15
+    printf("build_mfd_bar: value=%d, ratio=%.2f, scaled=%.2f, pos=%d\n", value, ratio, scaled, pos);
+
     int pos = (int)((((float)value / range) + 1.0f) * 7.5f + 0.5f);
     if (pos < 0) pos = 0;
     if (pos > 15) pos = 15;

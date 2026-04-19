@@ -35,6 +35,7 @@ static uint8_t x52_dev_addr = 0;
 static bool x52_btn_prev = false;
 static uint32_t x52_btn_press_time = 0;
 static bool x52_btn_handled = false;
+absolute_time_t x52_long_press_timeout;
 static bool ht_paused = false;
 static int16_t last_ht_x = 0;
 static uint8_t last_mfd_brightness = 0xFF; // Invalid initial to force first update
@@ -170,6 +171,18 @@ void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t cons
 
     // Extract head tracker X for MFD display
     if (dev_addr == ht_dev_addr && len >= 12) {
+        // 1. Print Raw Bytes
+        printf("HT RAW: [%02X][%02X][%02X][%02X]\n", report[0], report[1], report[2], report[3]);
+
+        // 2. Print every common combination to see which one looks like -511 to 511
+        int16_t le16 = (int16_t)(report[2] | (report[3] << 8)); // Little Endian
+        int16_t be16 = (int16_t)((report[2] << 8) | report[3]); // Big Endian
+        
+        // 10-bit extraction (assuming bit 9 is sign)
+        int16_t signed10 = (le16 << 6) >> 6; 
+        
+        printf("HT Trial: LE=%d | BE=%d | S10=%d\n", le16, be16, signed10);
+
         uint16_t twoBytes = report[2] | (report[3] << 8);
         uint16_t raw = twoBytes & 0x03FF;
         last_ht_x = (raw > 511) ? (int16_t)raw - 1024 : (int16_t)raw;
@@ -209,16 +222,18 @@ void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t cons
         if (ht_dev_addr != 0) {
             // X52 button: short press = reset, long press = pause toggle
             bool btn_now = (report[X52_BTN_BYTE] & X52_BTN_MASK) != 0;
-            uint32_t now = to_ms_since_boot(get_absolute_time());
+            //uint32_t now = to_ms_since_boot(get_absolute_time());
 
             if (btn_now && !x52_btn_prev) {
                 // Button just pressed — start timer
-                x52_btn_press_time = now;
+                //x52_btn_press_time = now;
+                x52_long_press_timeout = make_timeout_time_ms(LONG_PRESS_MS);
                 x52_btn_handled = false;
             }
             else if (btn_now && !x52_btn_handled) {
                 // Button held — check for long press
-                if (now - x52_btn_press_time >= LONG_PRESS_MS) {
+                //if (now - x52_btn_press_time >= LONG_PRESS_MS) {
+                if (time_reached(x52_long_press_timeout)) {
                     ht_paused = !ht_paused;
                     uint8_t cmd = HT_PAUSE_CMD;
                     queue_out_report((uint16_t)(ht_dev_addr << 8) | ht_instance, HT_REPORT_ID, &cmd, 1);
