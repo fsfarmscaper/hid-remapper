@@ -187,11 +187,15 @@ void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t cons
         // uint16_t raw = twoBytes & 0x03FF;
         // last_ht_x = (raw > 511) ? (int16_t)raw - 1024 : (int16_t)raw;
     
-        // 1. Join Byte 3 and 4 as Little Endian (0 to 1023)
-        uint16_t raw_10bit = report[3] | (report[4] << 8);
+        // // 1. Join Byte 3 and 4 as Little Endian (0 to 1023)
+        // uint16_t raw_10bit = report[3] | (report[4] << 8);
 
-        // 2. Center it (-512 to 511)
-        // If 513 was center in your log, subtracting 512 gives you 1 (perfect)
+        // // 2. Center it (-512 to 511)
+        // // If 513 was center in your log, subtracting 512 gives you 1 (perfect)
+        // int16_t headX_centered = (int16_t)raw_10bit - 512;
+
+        // Axis X (10-bit) starts at Byte 3.
+        uint16_t raw_10bit = report[3] | ((report[4] & 0x03) << 8);
         int16_t headX_centered = (int16_t)raw_10bit - 512;
   
         x52_update_ht_display(x52_dev_addr, headX_centered, ht_paused);
