@@ -178,10 +178,10 @@ static void build_mfd_bar(char* buf, int16_t value, int16_t range) {
 
     float ratio = (float)value / (float)range;
     float scaled = (ratio + 1.0f) * 7.5f;
-    int pos = (int)(scaled + 0.5f);
+    int pos_1 = (int)(scaled + 0.5f);
 
     // DEBUG PRINT: This tells us if the math is actually reaching 0 or 15
-    printf("build_mfd_bar: value=%d, ratio=%.2f, scaled=%.2f, pos=%d\n", value, ratio, scaled, pos);
+    printf("build_mfd_bar: value=%d, ratio=%.2f, scaled=%.2f, pos=%d\n", value, ratio, scaled, pos_1);
 
     int pos = (int)((((float)value / range) + 1.0f) * 7.5f + 0.5f);
     if (pos < 0) pos = 0;

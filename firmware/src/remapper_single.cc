@@ -210,7 +210,7 @@ void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t cons
         first_run = false;        
 #endif
 
-        // MFD brightness wheel (byte 8, 0-255 -> 0-128)
+        // MFD brightness wheel (byte 7, 0-255 -> 0-128)
         if (len > X52_BRIGHTNESS_BYTE) {
             uint8_t brightness = report[X52_BRIGHTNESS_BYTE] >> 1;
             if (brightness != last_mfd_brightness) {
