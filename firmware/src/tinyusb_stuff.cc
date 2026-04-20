@@ -255,9 +255,9 @@ void tud_resume_cb() {
 #if CFG_TUH_CDC
 
 // Callback when the ESP32 (as a CDC device) sends data to the RP2040
-void tuh_cdc_rx_cb(uint8_t dev_addr, uint8_t instance) {
+void tuh_cdc_rx_cb(uint8_t idx) {
     uint8_t buf[64];
-    uint32_t count = tuh_cdc_read(dev_addr, instance, buf, sizeof(buf));
+    uint32_t count = tuh_cdc_read(idx, buf, sizeof(buf));
 
     // We only print to the PC if the RP2040's own CDC is also active
     #if CFG_TUD_CDC
@@ -269,18 +269,19 @@ void tuh_cdc_rx_cb(uint8_t dev_addr, uint8_t instance) {
         fflush(stdout);
     }
     #endif
-
-    // Keep the listener alive
-    tuh_cdc_receive(dev_addr, instance, buf, sizeof(buf), true);
 }
 
 // Kickstart the reading process when the ESP32 CDC interface mounts
-void tuh_cdc_mount_cb(uint8_t dev_addr, uint8_t instance) {
-    uint8_t buf[64];
-    tuh_cdc_receive(dev_addr, instance, buf, sizeof(buf), true);
-    
+void tuh_cdc_mount_cb(uint8_t idx) {
+    // Set DTR + RTS so the ESP32 knows the terminal is ready
+    tuh_cdc_set_control_line_state(idx, CDC_CONTROL_LINE_STATE_DTR | CDC_CONTROL_LINE_STATE_RTS, NULL, 0);
+
+    // Set baud rate (usually ignored by USB CDC, but set for completeness)
+    cdc_line_coding_t line_coding = { .bit_rate = 115200, .stop_bits = 0, .parity = 0, .data_bits = 8 };
+    tuh_cdc_set_line_coding(idx, &line_coding, NULL, 0);
+
     #if CFG_TUD_CDC
-    printf("ESP32 CDC link established (addr %d, inst %d)\n", dev_addr, instance);
+    printf("ESP32 CDC link established (idx %d)\n", idx);
     #endif
 }
 

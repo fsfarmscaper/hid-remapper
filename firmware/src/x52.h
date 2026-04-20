@@ -66,7 +66,8 @@ bool x52_set_clock_offset(uint8_t dev_addr, uint8_t clock, int16_t offset_minute
 
 // Head tracker MFD display
 // Update rate-limited display showing X axis bar graph, or PAUSED state
-void x52_update_ht_display(uint8_t dev_addr, int16_t headX, bool paused);
+// Set force=true to bypass rate limit (e.g. on pause toggle)
+void x52_update_ht_display(uint8_t dev_addr, int16_t headX, bool paused, bool force = false);
 
 // Initialize MFD clocks: clock 1 = 00:00
 void x52_init_clocks(uint8_t dev_addr);

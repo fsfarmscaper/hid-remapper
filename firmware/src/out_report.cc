@@ -2,6 +2,7 @@
 #include <cstring>
 
 #include <tusb.h>
+#include "pico/time.h"
 
 #include "out_report.h"
 
@@ -23,6 +24,8 @@ static uint8_t oor_items = 0;
 static uint8_t get_buffer[64];
 
 static bool ready_to_send = true;
+static absolute_time_t last_send_time;
+#define SEND_TIMEOUT_MS 1000
 
 void do_queue_out_report(const uint8_t* report, uint16_t len, uint8_t report_id, uint8_t dev_addr, uint8_t interface, OutType type) {
     if (oor_items == OOR_BUFSIZE) {
@@ -60,17 +63,30 @@ void do_queue_get_report(uint8_t report_id, uint8_t dev_addr, uint8_t interface,
 }
 
 void do_send_out_report() {
+    // Recover from stuck transfers (completion callback never fired)
+    if (!ready_to_send && time_reached(last_send_time)) {
+        printf("out_report: send timeout, recovering\n");
+        ready_to_send = true;
+    }
+
     if ((oor_items > 0) && ready_to_send) {
         outgoing_out_report_t* out = &(outgoing_out_reports[oor_head]);
         if ((out->type == OutType::OUTPUT) || (out->type == OutType::SET_FEATURE)) {
-            if (tuh_hid_set_report(out->dev_addr, out->interface, out->report_id, (out->type == OutType::OUTPUT) ? HID_REPORT_TYPE_OUTPUT : HID_REPORT_TYPE_FEATURE, out->report, out->len)) {
+            bool ok = tuh_hid_set_report(out->dev_addr, out->interface, out->report_id, (out->type == OutType::OUTPUT) ? HID_REPORT_TYPE_OUTPUT : HID_REPORT_TYPE_FEATURE, out->report, out->len);
+#if CFG_TUD_CDC
+            printf("set_report(addr=%d,inst=%d,rid=%d,len=%d): %s\n",
+                   out->dev_addr, out->interface, out->report_id, out->len, ok ? "OK" : "FAIL");
+#endif
+            if (ok) {
                 ready_to_send = false;
+                last_send_time = make_timeout_time_ms(SEND_TIMEOUT_MS);
                 oor_head = (oor_head + 1) % OOR_BUFSIZE;
                 oor_items--;
             }
         } else if (out->type == OutType::GET_FEATURE) {
             if (tuh_hid_get_report(out->dev_addr, out->interface, out->report_id, HID_REPORT_TYPE_FEATURE, get_buffer, out->len)) {
                 ready_to_send = false;
+                last_send_time = make_timeout_time_ms(SEND_TIMEOUT_MS);
                 oor_head = (oor_head + 1) % OOR_BUFSIZE;
                 oor_items--;
             }

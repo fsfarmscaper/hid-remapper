@@ -164,7 +164,7 @@ bool x52_set_clock_offset(uint8_t dev_addr, uint8_t clock, int16_t offset_minute
 
 #define X52_HT_MFD_UPDATE_MS 100
 
-static uint32_t ht_mfd_last_update = 0;
+static absolute_time_t ht_mfd_next_update = {0};
 static char mfd_cache[3][17] = { "", "", "" }; // Cached line contents
 
 static void mfd_set_line_cached(uint8_t dev_addr, uint8_t line, const char* text) {
@@ -191,12 +191,11 @@ static void build_mfd_bar(char* buf, int16_t value, int16_t range) {
     buf[pos] = 'X'; // value position (overwrites center if at 0)
 }
 
-void x52_update_ht_display(uint8_t dev_addr, int16_t headX, bool paused) {
+void x52_update_ht_display(uint8_t dev_addr, int16_t headX, bool paused, bool force) {
     if (dev_addr == 0) return;
 
-    uint32_t now = to_ms_since_boot(get_absolute_time());
-    if (now - ht_mfd_last_update < X52_HT_MFD_UPDATE_MS) return;
-    ht_mfd_last_update = now;
+    if (!force && !time_reached(ht_mfd_next_update)) return;
+    ht_mfd_next_update = make_timeout_time_ms(X52_HT_MFD_UPDATE_MS);
 
 #if CFG_TUD_CDC
     printf("x52_update_ht_display: dev_addr=%u, headX=%d, paused=%s\n", dev_addr, headX, paused ? "true" : "false");

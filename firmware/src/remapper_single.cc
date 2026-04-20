@@ -138,7 +138,7 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* desc_re
         ht_dev_addr = dev_addr;
         ht_instance = instance;
         #if CFG_TUD_CDC
-            printf("Head Tracker detected (addr=%d, inst=%d)\n", ht_dev_addr, ht_instance);
+            printf("Head Tracker detected (addr=%d, inst=%d, itf_num=%d)\n", ht_dev_addr, ht_instance, itf_num);
         #endif
     }
 
@@ -170,49 +170,15 @@ void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t cons
     report_received_callback(dev_addr, instance, report, len);
 
 #if CFG_TUD_CDC
-    printf("tuh_hid_report_received_cb: dev_addr=%u, len=%u\n", dev_addr, len);
+    printf("tuh_hid_report_received_cb: dev_addr=%u, instance=%u, len=%u\n", dev_addr, instance, len);
 #endif
 
 
     // Extract head tracker X for MFD display
-    if (dev_addr == ht_dev_addr && len >= 8) {
-        // 1. Print Raw Bytes
-        // Show 8 bytes so we don't miss the spill-over
-        // printf("HT FULL RAW: [%02X][%02X][%02X][%02X][%02X][%02X][%02X][%02X]\n", 
-        //         report[0], report[1], report[2], report[3], 
-        //         report[4], report[5], report[6], report[7]);
+    // New minimal HID report: [ReportID(1)] [buttons(1)] [X_lo] [X_hi] [Y_lo] [Y_hi]
+    if (dev_addr == ht_dev_addr && len >= 4) {
 
-        // // Interpret as 16-bit integers (both ways)
-        // int16_t le_pair = (int16_t)(report[3] | (report[4] << 8));
-        // int16_t be_pair = (int16_t)((report[3] << 8) | report[4]);
-
-        // printf("Pairs starting at Byte 3: LE_16=%d | BE_16=%d\n", le_pair, be_pair);
-
-        // // uint16_t twoBytes = report[2] | (report[3] << 8);
-        // // uint16_t raw = twoBytes & 0x03FF;
-        // // last_ht_x = (raw > 511) ? (int16_t)raw - 1024 : (int16_t)raw;
-    
-        // // // 1. Join Byte 3 and 4 as Little Endian (0 to 1023)
-        // // uint16_t raw_10bit = report[3] | (report[4] << 8);
-
-        // // // 2. Center it (-512 to 511)
-        // // // If 513 was center in your log, subtracting 512 gives you 1 (perfect)
-        // // int16_t headX_centered = (int16_t)raw_10bit - 512;
-
-        // Axis X (10-bit) starts at Byte 3.
-        uint16_t raw_10bit = report[3] | ((report[4] & 0x03) << 8);
-//        int16_t headX_centered = (int16_t)raw_10bit - 512;
-
-        // Byte 3 is the 'base'. Byte 4's bottom 2 bits are the 'overflow'.
-//        uint16_t raw = report[3] | ((report[4] & 0x03) << 8);
-
-        // 2. Since the map says logical bounds are -512 to 511, 
-        // it's already a signed 10-bit number. 
-        // We must sign-extend it to 16-bit.
-        int16_t headX_centered = (raw_10bit & 0x0200) ? (int16_t)(raw_10bit | 0xFC00) : (int16_t)raw_10bit;
-
-        // 3. Print this to be 100% sure
-        printf("RAW: %02X %02X | 10bit: %u | Signed: %d\n", report[3], report[4], raw_10bit, headX_centered);
+        int16_t headX_centered = (int16_t)(report[2] | (report[3] << 8));
 
         x52_update_ht_display(x52_dev_addr, headX_centered, ht_paused);
     }
@@ -264,18 +230,24 @@ void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t cons
                 if (time_reached(x52_long_press_timeout)) {
                     ht_paused = !ht_paused;
                     uint8_t cmd = HT_PAUSE_CMD;
+                    #if CFG_TUD_CDC
+                        printf("Queuing HT pause cmd to addr=%d inst=%d\n", ht_dev_addr, ht_instance);
+                    #endif
                     queue_out_report((uint16_t)(ht_dev_addr << 8) | ht_instance, HT_REPORT_ID, &cmd, 1);
                     x52_btn_handled = true;
                     #if CFG_TUD_CDC
                         printf("X52 btn long -> HT %s\n", ht_paused ? "paused" : "resumed");
                     #endif
-                    x52_update_ht_display(x52_dev_addr, last_ht_x, ht_paused);
+                    x52_update_ht_display(x52_dev_addr, last_ht_x, ht_paused, true);
                 }
             }
             else if (!btn_now && x52_btn_prev) {
                 // Button released — short press if not already handled
                 if (!x52_btn_handled) {
                     uint8_t cmd = HT_RESET_CMD;
+                    #if CFG_TUD_CDC
+                        printf("Queuing HT reset cmd to addr=%d inst=%d\n", ht_dev_addr, ht_instance);
+                    #endif
                     queue_out_report((uint16_t)(ht_dev_addr << 8) | ht_instance, HT_REPORT_ID, &cmd, 1);
                     #if CFG_TUD_CDC
                         printf("X52 btn short -> HT reset\n");
