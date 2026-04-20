@@ -42,10 +42,20 @@
 #define X52_BLINK_ON  0x51
 #define X52_BLINK_OFF 0x50
 
+// X52 HID report byte layout
+#define X52_BRIGHTNESS_BYTE 7
+#define X52_BTN_BYTE   8
+#define X52_BTN_MASK   0x40
+#define LONG_PRESS_MS  500
+
+// X52 device state (managed by x52_on_mount/unmount)
+static uint8_t x52_dev_addr = 0;
+static uint8_t last_mfd_brightness = 0xFF;
+static bool x52_btn_prev = false;
+static bool x52_btn_handled = false;
+static absolute_time_t x52_long_press_timeout;
+
 bool x52_vendor_command(uint8_t dev_addr, uint16_t index, uint16_t value) {
-#if CFG_TUD_CDC
-    printf("x52_vendor_command: dev_addr=%u, index=0x%04x, value=0x%04x\n", dev_addr, index, value);
-#endif
     return queue_vendor_control_transfer(
         dev_addr,
         X52_VENDOR_REQUEST,  // bRequest = 0x91
@@ -68,10 +78,6 @@ bool x52_set_mfd_text(uint8_t dev_addr, uint8_t line, const char* text, uint8_t 
     if (length > 16) {
         length = 16;
     }
-
-#if CFG_TUD_CDC
-    printf("x52_set_mfd_text: dev_addr=%u, line=%u, text='%s', length=%u\n", dev_addr, line, text, length);
-#endif
 
     const uint16_t line_map[3] = { X52_MFD_LINE1, X52_MFD_LINE2, X52_MFD_LINE3 };
     uint16_t line_index = line_map[line];
@@ -175,14 +181,6 @@ static void mfd_set_line_cached(uint8_t dev_addr, uint8_t line, const char* text
 }
 
 static void build_mfd_bar(char* buf, int16_t value, int16_t range) {
-
-    float ratio = (float)value / (float)range;
-    float scaled = (ratio + 1.0f) * 7.5f;
-    int pos_1 = (int)(scaled + 0.5f);
-
-    // DEBUG PRINT: This tells us if the math is actually reaching 0 or 15
-    printf("build_mfd_bar: value=%d, ratio=%.2f, scaled=%.2f, pos=%d\n", value, ratio, scaled, pos_1);
-
     int pos = (int)((((float)value / range) + 1.0f) * 7.5f + 0.5f);
     if (pos < 0) pos = 0;
     if (pos > 15) pos = 15;
@@ -196,10 +194,6 @@ void x52_update_ht_display(uint8_t dev_addr, int16_t headX, bool paused, bool fo
 
     if (!force && !time_reached(ht_mfd_next_update)) return;
     ht_mfd_next_update = make_timeout_time_ms(X52_HT_MFD_UPDATE_MS);
-
-#if CFG_TUD_CDC
-    printf("x52_update_ht_display: dev_addr=%u, headX=%d, paused=%s\n", dev_addr, headX, paused ? "true" : "false");
-#endif
 
     if (paused) {
         mfd_set_line_cached(dev_addr, 0, "  Head Tracker  ");
@@ -224,4 +218,78 @@ void x52_update_ht_display(uint8_t dev_addr, int16_t headX, bool paused, bool fo
 
 void x52_init_clocks(uint8_t dev_addr) {
     x52_set_time(dev_addr, 0, 0, true);
+}
+
+// --- Device Lifecycle ---
+
+void x52_on_mount(uint8_t dev_addr, uint16_t vid, uint16_t pid) {
+    if (vid != X52_VENDOR_ID) return;
+    if (pid != X52_PRODUCT_ID_V1 && pid != X52_PRODUCT_ID_V2) return;
+
+    x52_dev_addr = dev_addr;
+    last_mfd_brightness = 0xFF;
+    x52_init_clocks(dev_addr);
+#if CFG_TUD_CDC
+    printf("X52 detected (PID: 0x%04X)\n", pid);
+#endif
+}
+
+void x52_on_unmount(uint8_t dev_addr) {
+    if (dev_addr == x52_dev_addr) {
+        x52_dev_addr = 0;
+        x52_btn_prev = false;
+    }
+}
+
+uint8_t x52_get_dev_addr() {
+    return x52_dev_addr;
+}
+
+// --- X52 Report Processing ---
+
+x52_ht_action x52_process_report(const uint8_t* report, uint16_t len, bool ht_connected) {
+    // MFD brightness wheel (byte 7, 0-255 -> 0-128)
+    if (len > X52_BRIGHTNESS_BYTE) {
+        uint8_t brightness = report[X52_BRIGHTNESS_BYTE] >> 1;
+        if (brightness != last_mfd_brightness) {
+            last_mfd_brightness = brightness;
+            x52_set_brightness(x52_dev_addr, true, brightness);
+        }
+    }
+
+    if (!ht_connected || len <= X52_BTN_BYTE) return X52_HT_NONE;
+
+    bool btn_now = (report[X52_BTN_BYTE] & X52_BTN_MASK) != 0;
+    x52_ht_action action = X52_HT_NONE;
+
+    if (btn_now && !x52_btn_prev) {
+        // Button just pressed — start timer
+        x52_long_press_timeout = make_timeout_time_ms(LONG_PRESS_MS);
+        x52_btn_handled = false;
+    }
+    else if (btn_now && !x52_btn_handled) {
+        // Button held — check for long press
+        if (time_reached(x52_long_press_timeout)) {
+            x52_btn_handled = true;
+            action = X52_HT_PAUSE;
+        }
+    }
+    else if (!btn_now && x52_btn_prev) {
+        // Button released — short press if not already handled
+        if (!x52_btn_handled) {
+            action = X52_HT_RESET;
+        }
+    }
+    x52_btn_prev = btn_now;
+
+    return action;
+}
+
+x52_ht_action x52_check_long_press(bool ht_connected) {
+    if (!ht_connected || !x52_btn_prev || x52_btn_handled) return X52_HT_NONE;
+    if (time_reached(x52_long_press_timeout)) {
+        x52_btn_handled = true;
+        return X52_HT_PAUSE;
+    }
+    return X52_HT_NONE;
 }

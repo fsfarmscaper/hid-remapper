@@ -27,6 +27,10 @@ static bool ready_to_send = true;
 static absolute_time_t last_send_time;
 #define SEND_TIMEOUT_MS 1000
 
+static absolute_time_t retry_after_time;
+static bool retry_pending = false;
+#define RETRY_DELAY_MS 50
+
 void do_queue_out_report(const uint8_t* report, uint16_t len, uint8_t report_id, uint8_t dev_addr, uint8_t interface, OutType type) {
     if (oor_items == OOR_BUFSIZE) {
         printf("out overflow!\n");
@@ -70,6 +74,12 @@ void do_send_out_report() {
     }
 
     if ((oor_items > 0) && ready_to_send) {
+        // Back off after a failed send to avoid hammering the USB stack
+        if (retry_pending && !time_reached(retry_after_time)) {
+            return;
+        }
+        retry_pending = false;
+
         outgoing_out_report_t* out = &(outgoing_out_reports[oor_head]);
         if ((out->type == OutType::OUTPUT) || (out->type == OutType::SET_FEATURE)) {
             bool ok = tuh_hid_set_report(out->dev_addr, out->interface, out->report_id, (out->type == OutType::OUTPUT) ? HID_REPORT_TYPE_OUTPUT : HID_REPORT_TYPE_FEATURE, out->report, out->len);
@@ -82,6 +92,9 @@ void do_send_out_report() {
                 last_send_time = make_timeout_time_ms(SEND_TIMEOUT_MS);
                 oor_head = (oor_head + 1) % OOR_BUFSIZE;
                 oor_items--;
+            } else {
+                retry_pending = true;
+                retry_after_time = make_timeout_time_ms(RETRY_DELAY_MS);
             }
         } else if (out->type == OutType::GET_FEATURE) {
             if (tuh_hid_get_report(out->dev_addr, out->interface, out->report_id, HID_REPORT_TYPE_FEATURE, get_buffer, out->len)) {

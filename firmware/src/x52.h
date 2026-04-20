@@ -37,6 +37,24 @@ enum x52_date_format {
     X52_DATE_FORMAT_YYMMDD,
 };
 
+// Button action results from X52 input processing
+enum x52_ht_action {
+    X52_HT_NONE,
+    X52_HT_RESET,      // Short press D: reset head tracker
+    X52_HT_PAUSE,      // Long press D: toggle pause
+};
+
+// Device lifecycle
+void x52_on_mount(uint8_t dev_addr, uint16_t vid, uint16_t pid);
+void x52_on_unmount(uint8_t dev_addr);
+uint8_t x52_get_dev_addr();
+
+// Process incoming X52 HID report (brightness + button state machine)
+x52_ht_action x52_process_report(const uint8_t* report, uint16_t len, bool ht_connected);
+
+// Poll long-press timeout from main loop (independent of X52 report rate)
+x52_ht_action x52_check_long_press(bool ht_connected);
+
 // Send a raw X52 vendor command (index + value)
 bool x52_vendor_command(uint8_t dev_addr, uint16_t index, uint16_t value);
 
