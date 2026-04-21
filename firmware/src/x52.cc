@@ -42,18 +42,21 @@
 #define X52_BLINK_ON  0x51
 #define X52_BLINK_OFF 0x50
 
-// X52 HID report byte layout
-#define X52_BRIGHTNESS_BYTE 7
-#define X52_BTN_BYTE   8
-#define X52_BTN_MASK   0x40
-#define LONG_PRESS_MS  500
-
 // X52 device state (managed by x52_on_mount/unmount)
 static uint8_t x52_dev_addr = 0;
 static uint8_t last_mfd_brightness = 0xFF;
 static bool x52_btn_prev = false;
 static bool x52_btn_handled = false;
 static absolute_time_t x52_long_press_timeout;
+
+// Shift mode state
+static bool shift_active = false;
+static bool shift_btn_prev = false;
+static uint8_t shift_scale = SHIFT_SCALE_NORMAL;
+
+// MFD page state
+static uint8_t mfd_page = MFD_PAGE_HT;
+static uint8_t scroll_prev = 0;
 
 bool x52_vendor_command(uint8_t dev_addr, uint16_t index, uint16_t value) {
     return queue_vendor_control_transfer(
@@ -190,7 +193,7 @@ static void build_mfd_bar(char* buf, int16_t value, int16_t range) {
 }
 
 void x52_update_ht_display(uint8_t dev_addr, int16_t headX, bool paused, bool force) {
-    if (dev_addr == 0) return;
+    if (dev_addr == 0 || mfd_page != MFD_PAGE_HT) return;
 
     if (!force && !time_reached(ht_mfd_next_update)) return;
     ht_mfd_next_update = make_timeout_time_ms(X52_HT_MFD_UPDATE_MS);
@@ -216,8 +219,27 @@ void x52_update_ht_display(uint8_t dev_addr, int16_t headX, bool paused, bool fo
 
 // --- Uptime Clock ---
 
+static absolute_time_t x52_mount_time = {0};
+static uint8_t last_clock_minute = 0xFF;
+
 void x52_init_clocks(uint8_t dev_addr) {
+    x52_mount_time = get_absolute_time();
+    last_clock_minute = 0xFF;
     x52_set_time(dev_addr, 0, 0, true);
+}
+
+void x52_update_clock() {
+    if (x52_dev_addr == 0) return;
+
+    uint32_t elapsed_s = absolute_time_diff_us(x52_mount_time, get_absolute_time()) / 1000000;
+    uint8_t minutes = (elapsed_s / 60) % 60;
+    uint8_t hours = (elapsed_s / 3600) % 24;
+
+    // Only send vendor command when the minute changes
+    if (minutes != last_clock_minute) {
+        last_clock_minute = minutes;
+        x52_set_time(x52_dev_addr, hours, minutes, true);
+    }
 }
 
 // --- Device Lifecycle ---
@@ -238,11 +260,72 @@ void x52_on_unmount(uint8_t dev_addr) {
     if (dev_addr == x52_dev_addr) {
         x52_dev_addr = 0;
         x52_btn_prev = false;
+        shift_active = false;
+        shift_btn_prev = false;
+        shift_scale = SHIFT_SCALE_NORMAL;
+        mfd_page = MFD_PAGE_HT;
+        scroll_prev = 0;
     }
 }
 
 uint8_t x52_get_dev_addr() {
     return x52_dev_addr;
+}
+
+// --- Shift Mode ---
+
+void x52_apply_shift(uint8_t* report, uint16_t len) {
+    if (x52_dev_addr == 0 || len <= X52_BTN_BASE) return;
+
+    // Detect E button rising edge — toggle shift
+    bool btn_now = (report[X52_BTN_BYTE(X52_BTN_E)] & X52_BTN_MASK(X52_BTN_E)) != 0;
+    if (btn_now && !shift_btn_prev) {
+        shift_active = !shift_active;
+        x52_set_shift(x52_dev_addr, shift_active);
+    }
+    shift_btn_prev = btn_now;
+
+    // Ramp scale toward target
+    uint8_t target = shift_active ? SHIFT_SCALE_LOW : SHIFT_SCALE_NORMAL;
+    if (shift_scale < target) {
+        shift_scale = (target - shift_scale > SHIFT_RAMP_STEP)
+            ? shift_scale + SHIFT_RAMP_STEP : target;
+    } else if (shift_scale > target) {
+        shift_scale = (shift_scale - target > SHIFT_RAMP_STEP)
+            ? shift_scale - SHIFT_RAMP_STEP : target;
+    }
+
+    // Scale throttle in place
+    if (len > X52_THROTTLE_BYTE) {
+        report[X52_THROTTLE_BYTE] =
+            (uint8_t)((report[X52_THROTTLE_BYTE] * shift_scale) / 255);
+    }
+}
+
+bool x52_is_shifted() {
+    return shift_active;
+}
+
+// --- MFD Paging ---
+
+static void x52_update_shift_display() {
+    if (x52_dev_addr == 0 || mfd_page != MFD_PAGE_SHIFT) return;
+    if (!time_reached(ht_mfd_next_update)) return;
+    ht_mfd_next_update = make_timeout_time_ms(X52_HT_MFD_UPDATE_MS);
+
+    mfd_set_line_cached(x52_dev_addr, 0, "   Shift Mode   ");
+
+    char line1[17];
+    snprintf(line1, 17, "  State: %-7s", shift_active ? "ON" : "OFF");
+    mfd_set_line_cached(x52_dev_addr, 1, line1);
+
+    char line2[17];
+    snprintf(line2, 17, " Throttle: %3u%% ", (unsigned)(shift_scale * 100 / 255));
+    mfd_set_line_cached(x52_dev_addr, 2, line2);
+}
+
+uint8_t x52_get_mfd_page() {
+    return mfd_page;
 }
 
 // --- X52 Report Processing ---
@@ -257,9 +340,27 @@ x52_ht_action x52_process_report(const uint8_t* report, uint16_t len, bool ht_co
         }
     }
 
-    if (!ht_connected || len <= X52_BTN_BYTE) return X52_HT_NONE;
+    // Scroll wheel page cycling (byte 12, buttons 33/34)
+    if (len > X52_SCROLL_BYTE) {
+        uint8_t scroll = report[X52_SCROLL_BYTE] & X52_SCROLL_MASK;
+        if (scroll != 0 && scroll_prev == 0) {
+            if (scroll == X52_SCROLL_DOWN) {
+                mfd_page = (mfd_page + 1) % MFD_NUM_PAGES;
+            } else {
+                mfd_page = (mfd_page + MFD_NUM_PAGES - 1) % MFD_NUM_PAGES;
+            }
+            memset(mfd_cache, 0, sizeof(mfd_cache));
+            ht_mfd_next_update = get_absolute_time();
+        }
+        scroll_prev = scroll;
+    }
 
-    bool btn_now = (report[X52_BTN_BYTE] & X52_BTN_MASK) != 0;
+    // Update shift page if active
+    x52_update_shift_display();
+
+    if (!ht_connected || len <= X52_BTN_BASE) return X52_HT_NONE;
+
+    bool btn_now = (report[X52_BTN_BYTE(X52_BTN_D)] & X52_BTN_MASK(X52_BTN_D)) != 0;
     x52_ht_action action = X52_HT_NONE;
 
     if (btn_now && !x52_btn_prev) {

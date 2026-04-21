@@ -30,6 +30,105 @@
 #define X52_LED_I_GREEN   19
 #define X52_LED_THROTTLE  20
 
+// --- X52 HID Report Layout (non-Pro, 14 bytes) ---
+// Byte offsets after report ID stripped by TinyUSB
+// Per libx52io: axes 0-2 and hat are on the joystick grip (not present on throttle-only)
+//
+// Byte  Bits     Usage                       Range      Location
+// 0-1   0-10     Stick X   (0x0001:0030)      0-2047     Joystick
+// 1-2   11-21    Stick Y   (0x0001:0031)      0-2047     Joystick
+// 2-3   22-31    Stick Rz  (0x0001:0035)      0-1023     Joystick (twist)
+// 4     32-39    Throttle  (0x0001:0032)       0-255      Throttle base
+// 5     40-47    Rotary X  (0x0001:0033)       0-255      Throttle base (clutch rotary)
+// 6     48-55    Rotary Y  (0x0001:0034)       0-255      Throttle base (E rotary)
+// 7     56-63    Slider    (0x0001:0036)       0-255      Throttle base (MFD brightness)
+// 8-12  64-97    Buttons 1-34                  0/1        Mixed (see below)
+// 12    98-99    Padding
+// 12    100-103  Hat switch (0x0001:0039)       1-8        Joystick (8-way POV)
+// 13    104-107  Mouse X   (0x0005:0024)       0-15       Throttle base (thumbstick)
+// 13    108-111  Mouse Y   (0x0005:0026)       0-15       Throttle base (thumbstick)
+
+#define X52_REPORT_LEN        14
+
+// Axis byte offsets
+#define X52_THROTTLE_BYTE     4
+#define X52_ROTARY_X_BYTE     5
+#define X52_ROTARY_Y_BYTE     6
+#define X52_SLIDER_BYTE       7
+#define X52_BRIGHTNESS_BYTE   7    // alias: slider is the MFD brightness wheel
+
+// Buttons 1-34 span bytes 8-12
+// Compute byte offset and bit mask from HID button number (1-34)
+#define X52_BTN_BASE          8
+#define X52_BTN_BYTE(n)       (X52_BTN_BASE + ((n) - 1) / 8)
+#define X52_BTN_MASK(n)       (1 << (((n) - 1) % 8))
+
+// HID button numbers (all 34 from descriptor, per libx52io parser)
+// Buttons on the joystick grip will read 0 when grip is not connected
+//
+// --- Joystick Grip (not present on throttle-only setup) ---
+#define X52_BTN_TRIGGER       1     // Stick: primary trigger
+#define X52_BTN_FIRE          2     // Stick: fire/launch
+#define X52_BTN_A             3     // Stick: A button
+#define X52_BTN_B             4     // Stick: B button
+#define X52_BTN_C             5     // Stick: C button
+#define X52_BTN_PINKY         6     // Stick: pinky/shift trigger
+#define X52_BTN_T1_UP         9     // Stick: toggle 1 up
+#define X52_BTN_T1_DN         10    // Stick: toggle 1 down
+#define X52_BTN_T2_UP         11    // Stick: toggle 2 up
+#define X52_BTN_T2_DN         12    // Stick: toggle 2 down
+#define X52_BTN_T3_UP         13    // Stick: toggle 3 up
+#define X52_BTN_T3_DN         14    // Stick: toggle 3 down
+#define X52_BTN_TRIGGER_2     15    // Stick: secondary trigger (stage 2)
+#define X52_BTN_POV_1_N       16    // Stick: 4-way POV north
+#define X52_BTN_POV_1_E       17    // Stick: 4-way POV east
+#define X52_BTN_POV_1_S       18    // Stick: 4-way POV south
+#define X52_BTN_POV_1_W       19    // Stick: 4-way POV west
+#define X52_BTN_MODE_1        24    // Stick: mode selector position 1
+#define X52_BTN_MODE_2        25    // Stick: mode selector position 2
+#define X52_BTN_MODE_3        26    // Stick: mode selector position 3
+//
+// --- Throttle Base ---
+#define X52_BTN_D             7     // Throttle: D button
+#define X52_BTN_E             8     // Throttle: E button
+#define X52_BTN_POV_2_N       20    // Throttle: 4-way POV north (up)
+#define X52_BTN_POV_2_E       21    // Throttle: 4-way POV east (right)
+#define X52_BTN_POV_2_S       22    // Throttle: 4-way POV south (down)
+#define X52_BTN_POV_2_W       23    // Throttle: 4-way POV west (left)
+#define X52_BTN_FUNCTION      27    // Throttle: MFD function button
+#define X52_BTN_START_STOP    28    // Throttle: MFD start/stop button
+#define X52_BTN_RESET         29    // Throttle: MFD reset button
+#define X52_BTN_CLUTCH        30    // Throttle: clutch (i) button
+#define X52_BTN_MOUSE_PRIMARY 31    // Throttle: mouse primary click
+#define X52_BTN_MOUSE_SECONDARY 32  // Throttle: mouse secondary (scroll press)
+#define X52_BTN_SCROLL_DN     33    // Throttle: MFD scroll wheel down
+#define X52_BTN_SCROLL_UP     34    // Throttle: MFD scroll wheel up
+
+// Scroll wheel convenience
+#define X52_SCROLL_BYTE       X52_BTN_BYTE(X52_BTN_SCROLL_DN)
+#define X52_SCROLL_MASK       (X52_BTN_MASK(X52_BTN_SCROLL_DN) | X52_BTN_MASK(X52_BTN_SCROLL_UP))
+#define X52_SCROLL_DOWN       X52_BTN_MASK(X52_BTN_SCROLL_DN)
+#define X52_SCROLL_UP         X52_BTN_MASK(X52_BTN_SCROLL_UP)
+
+// Hat switch (byte 12, upper nibble)
+#define X52_HAT_BYTE          12
+#define X52_HAT_SHIFT         4
+#define X52_HAT_MASK          0xF0
+
+// Mouse ministick (byte 13)
+#define X52_MOUSE_BYTE        13
+#define X52_MOUSE_X_MASK      0x0F
+#define X52_MOUSE_Y_SHIFT     4
+#define X52_MOUSE_Y_MASK      0xF0
+
+// Timing
+#define LONG_PRESS_MS         500
+
+// Shift mode throttle scaling
+#define SHIFT_SCALE_NORMAL    255   // 100%
+#define SHIFT_SCALE_LOW       64    // 25%
+#define SHIFT_RAMP_STEP       4     // per report (~480ms transition at 100Hz)
+
 // Date formats
 enum x52_date_format {
     X52_DATE_FORMAT_DDMMYY,
@@ -44,6 +143,11 @@ enum x52_ht_action {
     X52_HT_PAUSE,      // Long press D: toggle pause
 };
 
+// MFD page identifiers
+#define MFD_PAGE_HT     0
+#define MFD_PAGE_SHIFT  1
+#define MFD_NUM_PAGES   2
+
 // Device lifecycle
 void x52_on_mount(uint8_t dev_addr, uint16_t vid, uint16_t pid);
 void x52_on_unmount(uint8_t dev_addr);
@@ -51,6 +155,13 @@ uint8_t x52_get_dev_addr();
 
 // Process incoming X52 HID report (brightness + button state machine)
 x52_ht_action x52_process_report(const uint8_t* report, uint16_t len, bool ht_connected);
+
+// Apply shift mode: toggle on E button, ramp-scale throttle in place
+// Call BEFORE report_received_callback so games see scaled value
+void x52_apply_shift(uint8_t* report, uint16_t len);
+
+// Query current shift state
+bool x52_is_shifted();
 
 // Poll long-press timeout from main loop (independent of X52 report rate)
 x52_ht_action x52_check_long_press(bool ht_connected);
@@ -87,7 +198,13 @@ bool x52_set_clock_offset(uint8_t dev_addr, uint8_t clock, int16_t offset_minute
 // Set force=true to bypass rate limit (e.g. on pause toggle)
 void x52_update_ht_display(uint8_t dev_addr, int16_t headX, bool paused, bool force = false);
 
-// Initialize MFD clocks: clock 1 = 00:00
+// Initialize MFD clocks: clock 1 = 00:00, start uptime tracking
 void x52_init_clocks(uint8_t dev_addr);
+
+// Update uptime clock on MFD (call from main loop, sends only on minute change)
+void x52_update_clock();
+
+// Get current MFD page (MFD_PAGE_HT, MFD_PAGE_SHIFT, etc.)
+uint8_t x52_get_mfd_page();
 
 #endif

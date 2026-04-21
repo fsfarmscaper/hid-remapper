@@ -15,7 +15,7 @@
 
 // Head Tracker (Arduino Nano ESP32)
 #define HT_VENDOR_ID   0x2341
-#define HT_PRODUCT_ID  0x0070
+#define HT_PRODUCT_ID  0x8070
 #define HT_RESET_CMD   0x01
 #define HT_PAUSE_CMD   0x02
 #define HT_REPORT_ID   2
@@ -88,6 +88,9 @@ void read_report(bool* new_report, bool* tick) {
     
     // Process pending vendor control transfers
     process_vendor_control_transfers();
+
+    // Update X52 uptime clock (sends vendor cmd only on minute change)
+    x52_update_clock();
 
     // Poll X52 long-press timeout (independent of X52 report rate)
     handle_ht_action(x52_check_long_press(ht_dev_addr != 0));
@@ -164,6 +167,11 @@ void report_received_callback(uint8_t dev_addr, uint8_t instance, uint8_t const*
 }
 
 void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* report, uint16_t len) {
+    // Apply shift mode throttle scaling before remapper sees the report
+    if (dev_addr == x52_get_dev_addr()) {
+        x52_apply_shift((uint8_t*)report, len);
+    }
+
     report_received_callback(dev_addr, instance, report, len);
 
 
