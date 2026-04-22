@@ -58,6 +58,10 @@ static uint8_t shift_scale = SHIFT_SCALE_NORMAL;
 static uint8_t mfd_page = MFD_PAGE_HT;
 static uint8_t scroll_prev = 0;
 
+// Last known HT display values (for redraw on page switch)
+static int16_t last_ht_x = 0;
+static bool last_ht_paused = false;
+
 bool x52_vendor_command(uint8_t dev_addr, uint16_t index, uint16_t value) {
     return queue_vendor_control_transfer(
         dev_addr,
@@ -193,6 +197,10 @@ static void build_mfd_bar(char* buf, int16_t value, int16_t range) {
 }
 
 void x52_update_ht_display(uint8_t dev_addr, int16_t headX, bool paused, bool force) {
+    // Cache latest values for redraw on page switch
+    last_ht_x = headX;
+    last_ht_paused = paused;
+
     if (dev_addr == 0 || mfd_page != MFD_PAGE_HT) return;
 
     if (!force && !time_reached(ht_mfd_next_update)) return;
@@ -351,6 +359,11 @@ x52_ht_action x52_process_report(const uint8_t* report, uint16_t len, bool ht_co
             }
             memset(mfd_cache, 0, sizeof(mfd_cache));
             ht_mfd_next_update = get_absolute_time();
+
+            // Force immediate display update for the new page
+            if (mfd_page == MFD_PAGE_HT) {
+                x52_update_ht_display(x52_dev_addr, last_ht_x, last_ht_paused, true);
+            }
         }
         scroll_prev = scroll;
     }
