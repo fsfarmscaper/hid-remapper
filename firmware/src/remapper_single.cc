@@ -128,6 +128,9 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* desc_re
     uint16_t vid;
     uint16_t pid;
     tuh_vid_pid_get(dev_addr, &vid, &pid);
+#if CFG_TUD_CDC
+    printf("Device connected (addr=%d, vid=%d, pid=%d)\n", dev_addr, vid, pid);
+#endif
 
     tuh_itf_info_t itf_info;
     tuh_hid_itf_get_info(dev_addr, instance, &itf_info);
@@ -152,13 +155,16 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* desc_re
 
     if (vid == G923_VENDOR_ID && pid == G923_PID_XBOX) {
         x52_set_g923_connected(true);
+#if CFG_TUD_CDC
+        printf("Logitech G923 in PC Mode detected (addr=%d, vid=%d, pid=%d)\n", dev_addr, vid, pid);
+#endif
     }
 
     if (vid == ATTACK3_VENDOR_ID && pid == ATTACK3_PRODUCT_ID) {
         attack3_dev_addr = dev_addr;
         x52_set_attack3_connected(true);
 #if CFG_TUD_CDC
-        printf("Attack 3 detected (addr=%d)\n", dev_addr);
+        printf("Logitech Attack 3 detected (addr=%d, vid=%d, pid=%d)\n", dev_addr, vid, pid);
 #endif
     }
 
