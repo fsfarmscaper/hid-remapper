@@ -43,6 +43,7 @@ add_executable(remapper
     src/out_report.cc
     src/vendor_control.cc
     src/x52.cc
+    src/g923.cc
     src/cdc_debug.cc
     src/tick.cc
     src/activity_led.cc

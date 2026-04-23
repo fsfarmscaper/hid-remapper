@@ -55,12 +55,26 @@ static bool shift_btn_prev = false;
 static uint8_t shift_scale = SHIFT_SCALE_NORMAL;
 
 // MFD page state
-static uint8_t mfd_page = MFD_PAGE_HT;
+static uint8_t mfd_page = MFD_PAGE_SHIFT;
 static uint8_t scroll_prev = 0;
 
 // Last known HT display values (for redraw on page switch)
 static int16_t last_ht_x = 0;
 static bool last_ht_paused = false;
+
+// Device connection state for MFD pages
+static bool ht_connected = false;
+static bool g923_connected = false;
+static bool attack3_connected = false;
+
+// Cached G923 display values
+static uint16_t last_g923_range = 360;
+static uint8_t last_g923_spring = 50;
+static uint8_t last_g923_sensitivity = 30;
+
+// Cached Attack 3 display values
+static uint8_t last_attack3_z = 0;
+static uint16_t last_attack3_scale_pct = 125;
 
 bool x52_vendor_command(uint8_t dev_addr, uint16_t index, uint16_t value) {
     return queue_vendor_control_transfer(
@@ -206,6 +220,13 @@ void x52_update_ht_display(uint8_t dev_addr, int16_t headX, bool paused, bool fo
     if (!force && !time_reached(ht_mfd_next_update)) return;
     ht_mfd_next_update = make_timeout_time_ms(X52_HT_MFD_UPDATE_MS);
 
+    if (!ht_connected) {
+        mfd_set_line_cached(dev_addr, 0, "                ");
+        mfd_set_line_cached(dev_addr, 1, "   Connect HT   ");
+        mfd_set_line_cached(dev_addr, 2, "                ");
+        return;
+    }
+
     if (paused) {
         mfd_set_line_cached(dev_addr, 0, "  Head Tracker  ");
         mfd_set_line_cached(dev_addr, 1, "  -- PAUSED --  ");
@@ -271,7 +292,7 @@ void x52_on_unmount(uint8_t dev_addr) {
         shift_active = false;
         shift_btn_prev = false;
         shift_scale = SHIFT_SCALE_NORMAL;
-        mfd_page = MFD_PAGE_HT;
+        mfd_page = MFD_PAGE_SHIFT;
         scroll_prev = 0;
     }
 }
@@ -316,9 +337,9 @@ bool x52_is_shifted() {
 
 // --- MFD Paging ---
 
-static void x52_update_shift_display() {
+static void x52_update_shift_display(bool force) {
     if (x52_dev_addr == 0 || mfd_page != MFD_PAGE_SHIFT) return;
-    if (!time_reached(ht_mfd_next_update)) return;
+    if (!force && !time_reached(ht_mfd_next_update)) return;
     ht_mfd_next_update = make_timeout_time_ms(X52_HT_MFD_UPDATE_MS);
 
     mfd_set_line_cached(x52_dev_addr, 0, "   Shift Mode   ");
@@ -332,13 +353,114 @@ static void x52_update_shift_display() {
     mfd_set_line_cached(x52_dev_addr, 2, line2);
 }
 
+static void x52_update_g923_page(bool force) {
+    if (x52_dev_addr == 0 || mfd_page != MFD_PAGE_G923) return;
+    if (!force && !time_reached(ht_mfd_next_update)) return;
+    ht_mfd_next_update = make_timeout_time_ms(X52_HT_MFD_UPDATE_MS);
+
+    if (!g923_connected) {
+        mfd_set_line_cached(x52_dev_addr, 0, "                ");
+        mfd_set_line_cached(x52_dev_addr, 1, "  Connect G923  ");
+        mfd_set_line_cached(x52_dev_addr, 2, "                ");
+        return;
+    }
+
+    char line0[17];
+    snprintf(line0, 17, " G923  Rng:%3u%c ", last_g923_range, 0x7F);  // degree symbol approximation
+    mfd_set_line_cached(x52_dev_addr, 0, line0);
+
+    char line1[17];
+    snprintf(line1, 17, " Spring:  %3u%%  ", last_g923_spring);
+    mfd_set_line_cached(x52_dev_addr, 1, line1);
+
+    char line2[17];
+    snprintf(line2, 17, " Sensit:  %3u%%  ", last_g923_sensitivity);
+    mfd_set_line_cached(x52_dev_addr, 2, line2);
+}
+
+static void x52_update_attack3_page(bool force) {
+    if (x52_dev_addr == 0 || mfd_page != MFD_PAGE_ATTACK3) return;
+    if (!force && !time_reached(ht_mfd_next_update)) return;
+    ht_mfd_next_update = make_timeout_time_ms(X52_HT_MFD_UPDATE_MS);
+
+    if (!attack3_connected) {
+        mfd_set_line_cached(x52_dev_addr, 0, "                ");
+        mfd_set_line_cached(x52_dev_addr, 1, " Connect Attk 3 ");
+        mfd_set_line_cached(x52_dev_addr, 2, "                ");
+        return;
+    }
+
+    mfd_set_line_cached(x52_dev_addr, 0, " Attack3 Z-Axis ");
+
+    char bar[17];
+    // Z 0=released (scale 125%), 255=pressed (scale 25%), show as bar
+    build_mfd_bar(bar, (int16_t)(255 - last_attack3_z) - 128, 128);
+    bar[16] = '\0';
+    mfd_set_line_cached(x52_dev_addr, 1, bar);
+
+    char line2[17];
+    snprintf(line2, 17, "  Scale: %3u%%   ", last_attack3_scale_pct);
+    mfd_set_line_cached(x52_dev_addr, 2, line2);
+}
+
+static void x52_update_reserved_page(bool force) {
+    if (x52_dev_addr == 0 || mfd_page != MFD_PAGE_RESERVED) return;
+    if (!force && !time_reached(ht_mfd_next_update)) return;
+    ht_mfd_next_update = make_timeout_time_ms(X52_HT_MFD_UPDATE_MS);
+
+    mfd_set_line_cached(x52_dev_addr, 0, "                ");
+    mfd_set_line_cached(x52_dev_addr, 1, "    Reserved    ");
+    mfd_set_line_cached(x52_dev_addr, 2, "                ");
+}
+
+static void x52_refresh_current_page() {
+    switch (mfd_page) {
+        case MFD_PAGE_SHIFT:   x52_update_shift_display(true); break;
+        case MFD_PAGE_HT:     x52_update_ht_display(x52_dev_addr, last_ht_x, last_ht_paused, true); break;
+        case MFD_PAGE_G923:    x52_update_g923_page(true); break;
+        case MFD_PAGE_ATTACK3: x52_update_attack3_page(true); break;
+        case MFD_PAGE_RESERVED: x52_update_reserved_page(true); break;
+    }
+}
+
+// --- Device connection tracking ---
+
+void x52_set_ht_connected(bool connected) {
+    ht_connected = connected;
+}
+
+void x52_set_g923_connected(bool connected) {
+    g923_connected = connected;
+}
+
+void x52_set_attack3_connected(bool connected) {
+    attack3_connected = connected;
+}
+
+void x52_update_g923_display(uint16_t range, uint8_t spring_pct, uint8_t sensitivity) {
+    last_g923_range = range;
+    last_g923_spring = spring_pct;
+    last_g923_sensitivity = sensitivity;
+    if (mfd_page == MFD_PAGE_G923) {
+        x52_update_g923_page(false);
+    }
+}
+
+void x52_update_attack3_display(uint8_t z_val, uint16_t scale_pct) {
+    last_attack3_z = z_val;
+    last_attack3_scale_pct = scale_pct;
+    if (mfd_page == MFD_PAGE_ATTACK3) {
+        x52_update_attack3_page(false);
+    }
+}
+
 uint8_t x52_get_mfd_page() {
     return mfd_page;
 }
 
 // --- X52 Report Processing ---
 
-x52_ht_action x52_process_report(const uint8_t* report, uint16_t len, bool ht_connected) {
+x52_ht_action x52_process_report(const uint8_t* report, uint16_t len, bool ht_is_connected) {
     // MFD brightness wheel (byte 7, 0-255 -> 0-128)
     if (len > X52_BRIGHTNESS_BYTE) {
         uint8_t brightness = report[X52_BRIGHTNESS_BYTE] >> 1;
@@ -361,17 +483,21 @@ x52_ht_action x52_process_report(const uint8_t* report, uint16_t len, bool ht_co
             ht_mfd_next_update = get_absolute_time();
 
             // Force immediate display update for the new page
-            if (mfd_page == MFD_PAGE_HT) {
-                x52_update_ht_display(x52_dev_addr, last_ht_x, last_ht_paused, true);
-            }
+            x52_refresh_current_page();
         }
         scroll_prev = scroll;
     }
 
-    // Update shift page if active
-    x52_update_shift_display();
+    // Update current page display
+    switch (mfd_page) {
+        case MFD_PAGE_SHIFT:    x52_update_shift_display(false); break;
+        case MFD_PAGE_HT:       break; // Updated from report callback
+        case MFD_PAGE_G923:     x52_update_g923_page(false); break;
+        case MFD_PAGE_ATTACK3:  x52_update_attack3_page(false); break;
+        case MFD_PAGE_RESERVED: x52_update_reserved_page(false); break;
+    }
 
-    if (!ht_connected || len <= X52_BTN_BASE) return X52_HT_NONE;
+    if (!ht_is_connected || len <= X52_BTN_BASE) return X52_HT_NONE;
 
     bool btn_now = (report[X52_BTN_BYTE(X52_BTN_D)] & X52_BTN_MASK(X52_BTN_D)) != 0;
     x52_ht_action action = X52_HT_NONE;
@@ -399,8 +525,8 @@ x52_ht_action x52_process_report(const uint8_t* report, uint16_t len, bool ht_co
     return action;
 }
 
-x52_ht_action x52_check_long_press(bool ht_connected) {
-    if (!ht_connected || !x52_btn_prev || x52_btn_handled) return X52_HT_NONE;
+x52_ht_action x52_check_long_press(bool ht_is_connected) {
+    if (!ht_is_connected || !x52_btn_prev || x52_btn_handled) return X52_HT_NONE;
     if (time_reached(x52_long_press_timeout)) {
         x52_btn_handled = true;
         return X52_HT_PAUSE;

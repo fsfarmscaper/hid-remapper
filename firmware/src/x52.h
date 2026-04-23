@@ -144,9 +144,12 @@ enum x52_ht_action {
 };
 
 // MFD page identifiers
-#define MFD_PAGE_HT     0
-#define MFD_PAGE_SHIFT  1
-#define MFD_NUM_PAGES   2
+#define MFD_PAGE_SHIFT    0   // X52 throttle shift (default)
+#define MFD_PAGE_HT       1   // Head Tracker
+#define MFD_PAGE_G923     2   // G923 wheel settings
+#define MFD_PAGE_ATTACK3  3   // Attack 3 Z-axis scaling
+#define MFD_PAGE_RESERVED 4   // Reserved for future use
+#define MFD_NUM_PAGES     5
 
 // Device lifecycle
 void x52_on_mount(uint8_t dev_addr, uint16_t vid, uint16_t pid);
@@ -204,7 +207,18 @@ void x52_init_clocks(uint8_t dev_addr);
 // Update uptime clock on MFD (call from main loop, sends only on minute change)
 void x52_update_clock();
 
-// Get current MFD page (MFD_PAGE_HT, MFD_PAGE_SHIFT, etc.)
+// Get current MFD page (MFD_PAGE_SHIFT, MFD_PAGE_HT, etc.)
 uint8_t x52_get_mfd_page();
+
+// Device connection tracking for MFD pages
+void x52_set_ht_connected(bool connected);
+void x52_set_g923_connected(bool connected);
+void x52_set_attack3_connected(bool connected);
+
+// Update cached G923 display values (shown when on G923 page)
+void x52_update_g923_display(uint16_t range, uint8_t spring_pct, uint8_t sensitivity);
+
+// Update cached Attack 3 display values (shown when on Attack3 page)
+void x52_update_attack3_display(uint8_t z_val, uint16_t scale_pct);
 
 #endif

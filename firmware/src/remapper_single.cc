@@ -12,6 +12,7 @@
 #include "tick.h"
 #include "vendor_control.h"
 #include "x52.h"
+#include "g923.h"
 
 // Head Tracker (Arduino Nano ESP32)
 #define HT_VENDOR_ID   0x2341
@@ -20,11 +21,16 @@
 #define HT_PAUSE_CMD   0x02
 #define HT_REPORT_ID   2
 
+// Logitech Attack 3 joystick
+#define ATTACK3_VENDOR_ID   0x046D
+#define ATTACK3_PRODUCT_ID  0xC214
 
 static uint8_t ht_dev_addr = 0;
 static uint8_t ht_instance = 0;
 static bool ht_paused = false;
 static int16_t last_ht_x = 0;
+
+static uint8_t attack3_dev_addr = 0;
 
 static void handle_ht_action(x52_ht_action action) {
     if (action == X52_HT_NONE || ht_dev_addr == 0) return;
@@ -133,14 +139,31 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* desc_re
 
     x52_on_mount(dev_addr, vid, pid);
 
-    // Head Tracker detection
+    // Set connection flags BEFORE on_mount calls so display updates
+    // from g923_apply_defaults() see the correct connected state
     if (vid == HT_VENDOR_ID && pid == HT_PRODUCT_ID) {
         ht_dev_addr = dev_addr;
         ht_instance = instance;
-        #if CFG_TUD_CDC
-            printf("Head Tracker detected (addr=%d, inst=%d, itf_num=%d)\n", ht_dev_addr, ht_instance, itf_num);
-        #endif
+        x52_set_ht_connected(true);
+#if CFG_TUD_CDC
+        printf("Head Tracker detected (addr=%d, inst=%d, itf_num=%d)\n", ht_dev_addr, ht_instance, itf_num);
+#endif
     }
+
+    if (vid == G923_VENDOR_ID && pid == G923_PID_XBOX) {
+        x52_set_g923_connected(true);
+    }
+
+    if (vid == ATTACK3_VENDOR_ID && pid == ATTACK3_PRODUCT_ID) {
+        attack3_dev_addr = dev_addr;
+        x52_set_attack3_connected(true);
+#if CFG_TUD_CDC
+        printf("Attack 3 detected (addr=%d)\n", dev_addr);
+#endif
+    }
+
+    // on_mount after connection flags so MFD display sees correct state
+    g923_on_mount(dev_addr, instance, vid, pid);
 
     tuh_hid_receive_report(dev_addr, instance);
 }
@@ -153,8 +176,19 @@ void tuh_hid_umount_cb(uint8_t dev_addr, uint8_t instance) {
 #if CFG_TUD_CDC
     printf("tuh_hid_umount_cb\n");
 #endif
-    if (dev_addr == ht_dev_addr) { ht_dev_addr = 0; }
+    if (dev_addr == ht_dev_addr) {
+        ht_dev_addr = 0;
+        x52_set_ht_connected(false);
+    }
+    if (dev_addr == g923_get_dev_addr()) {
+        x52_set_g923_connected(false);
+    }
+    if (dev_addr == attack3_dev_addr) {
+        attack3_dev_addr = 0;
+        x52_set_attack3_connected(false);
+    }
     x52_on_unmount(dev_addr);
+    g923_on_unmount(dev_addr);
     umount_callback(dev_addr, instance);
 }
 
@@ -179,6 +213,16 @@ void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t cons
     if (dev_addr == ht_dev_addr && len >= 4) {
         int16_t headX_centered = (int16_t)(report[2] | (report[3] << 8));
         x52_update_ht_display(x52_get_dev_addr(), headX_centered, ht_paused);
+    }
+
+    // Update Attack 3 Z-axis display
+    // Z is byte 2 (bits 16-23), 0-255; expression:
+    //   abs(z - 255) / 255 + 0.25  → scale 0.25 (z=255) to 1.25 (z=0)
+    //   Display as percentage: (255-z)*100/255 + 25
+    if (dev_addr == attack3_dev_addr && len >= 3) {
+        uint8_t z_val = report[2];
+        uint16_t scale_pct = (uint16_t)(((255 - z_val) * 100) / 255 + 25);
+        x52_update_attack3_display(z_val, scale_pct);
     }
 
     // Process X52 reports (brightness, button state machine)
