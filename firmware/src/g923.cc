@@ -57,6 +57,10 @@ static uint16_t g923_iface() {
 // Build and queue a HID++ Long report (Report ID 0x11, 20 bytes total).
 // queue_out_report prepends the report_id byte, so we pass 19 bytes.
 static bool hidpp_send_long(uint8_t feat_idx, uint8_t func_id, const uint8_t* params, uint8_t param_len) {
+#if CFG_TUD_CDC
+    printf("hidpp_send_long (feat_idx=%d, func_id=%d, param_len=%d)\n", feat_idx, func_id, param_len);
+#endif
+
     if (!g923_dev_addr || !g923_xbox) return false;
     if (param_len > 16) return false;  // 19 - 3 header bytes = 16 max params
 
@@ -106,6 +110,10 @@ static bool hidpp_send_vlong(uint8_t feat_idx, uint8_t func_id, const uint8_t* p
 
 void g923_on_mount(uint8_t dev_addr, uint8_t instance, uint16_t vid, uint16_t pid) {
     if (vid != G923_VENDOR_ID) return;
+
+#if CFG_TUD_CDC
+        printf("g923_on_mount (addr=%d, inst=%d, vid=%d, pid=%d)\n", dev_addr, instance, vid, pid);
+#endif
 
     if (pid == G923_PID_XBOX) {
         g923_dev_addr = dev_addr;
@@ -287,6 +295,10 @@ bool g923_set_leds_ps(uint8_t setting) {
 // Response byte[4] = runtime feature index
 // TODO: parse IRoot response to extract runtime index dynamically
 static bool g923_discover_led_feature(void) {
+#if CFG_TUD_CDC
+    printf("g923_discover_led_feature\n");
+#endif
+
     uint8_t params[] = {
         (uint8_t)(HIDPP_PAGE_LED_CTRL >> 8),
         (uint8_t)(HIDPP_PAGE_LED_CTRL & 0xFF)
@@ -300,16 +312,25 @@ static bool g923_discover_led_feature(void) {
 // This is the critical unlock found ONLY in the working pcap capture.
 // Without this, func 6 LED commands return NOT_ALLOWED (0x05).
 bool g923_enable_leds(void) {
+#if CFG_TUD_CDC
+    printf("g923_enable_leds\n");
+#endif
     if (!g923_led_feat_idx) return false;
     uint8_t params[] = { 0x02, 0x00 };
     bool ok = hidpp_send_long(g923_led_feat_idx, G923_LED_FUNC_SET_MODE, params, sizeof(params));
     if (ok) g923_led_enabled = true;
+#if CFG_TUD_CDC
+    printf("g923_enable_leds: LEDs enabled (%s)\n", ok ? "success" : "failed");
+#endif
     return ok;
 }
 
 // Set LED level (0-5)
 // Func 6 payload: [base_hi, base_lo, mask_hi, mask_lo, level_hi, level_lo]
 bool g923_set_leds(uint8_t level) {
+#if CFG_TUD_CDC
+    printf("g923_set_leds (level=%d)\n", level);
+#endif
     if (!g923_led_feat_idx) return false;
     if (level > 5) level = 5;
 
@@ -328,6 +349,10 @@ bool g923_set_leds(uint8_t level) {
 
 // Full LED init — discover feature + enable
 void g923_init_leds(void) {
+#if CFG_TUD_CDC
+    printf("g923_init_leds\n");
+#endif
+
     if (!g923_dev_addr || !g923_xbox) return;
     g923_discover_led_feature();
     // TODO: wait for IRoot response before enabling
@@ -431,20 +456,27 @@ void g923_simulate_rev_counter(uint8_t accelerator, uint8_t brake, uint8_t stage
 // ============================================================
 
 void g923_apply_defaults() {
-    // Wheel range: 360 degrees
-    g923_set_wheel_range(360);
+#if CFG_TUD_CDC
+    printf("g923_apply_defaults\n");
+#endif
 
-    // Steering sensitivity: 30%
-    g923_set_sensitivity(G923_AXIS_STEERING, 30);
 
-    // Spring effect: 50% coefficient on slot 0
-    // Scale: percentage * 0x7FFF / 100  (20%=0x1999, 50%=0x3FFF, 100%=0x7FFF)
-    // Full saturation (0x7FFF) = max centering force at full deflection
-    // Deadband=0 (no dead zone), center=0 (wheel midpoint)
-    g923_set_spring(0,
-                    0x3FFF, 0x3FFF,   // left/right coefficient (50%)
-                    0x7FFF, 0x7FFF,   // left/right saturation (full)
-                    0x0000, 0x0000);  // deadband=0, center=0 (midpoint)
+    // TODO: PA check if updating these settings requires a mode unlock first.
+
+    // // Wheel range: 360 degrees
+    // g923_set_wheel_range(360);
+
+    // // Steering sensitivity: 30%
+    // g923_set_sensitivity(G923_AXIS_STEERING, 30);
+
+    // // Spring effect: 50% coefficient on slot 0
+    // // Scale: percentage * 0x7FFF / 100  (20%=0x1999, 50%=0x3FFF, 100%=0x7FFF)
+    // // Full saturation (0x7FFF) = max centering force at full deflection
+    // // Deadband=0 (no dead zone), center=0 (wheel midpoint)
+    // g923_set_spring(0,
+    //                 0x3FFF, 0x3FFF,   // left/right coefficient (50%)
+    //                 0x7FFF, 0x7FFF,   // left/right saturation (full)
+    //                 0x0000, 0x0000);  // deadband=0, center=0 (midpoint)
 
     // LED unlock: discover feature 0x807A + enable LED writes
     g923_init_leds();

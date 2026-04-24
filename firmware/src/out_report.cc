@@ -32,6 +32,11 @@ static bool retry_pending = false;
 #define RETRY_DELAY_MS 50
 
 void do_queue_out_report(const uint8_t* report, uint16_t len, uint8_t report_id, uint8_t dev_addr, uint8_t interface, OutType type) {
+#if CFG_TUD_CDC
+    printf("do_queue_out_report (interface=%d, report_id=%d, len=%d)\n", interface, report_id, len);
+    printf("do_queue_out_report (oor_items=%d, oor_tail=%d, oor_buffer_size=%d)\n", oor_items, oor_tail, OOR_BUFSIZE);
+#endif
+    
     // TODO: PA Buffer overflow handling — currently just drops new reports when full, so needs rate limiting on the caller side to avoid silent drops. Could return false here and let caller decide whether to retry or drop. For GET_REPORT, caller must retry since there's no report data in the queue.
     if (oor_items == OOR_BUFSIZE) {
         printf("out overflow!\n");
@@ -73,6 +78,10 @@ void do_send_out_report() {
         printf("out_report: send timeout, recovering\n");
         ready_to_send = true;
     }
+
+#if CFG_TUD_CDC
+    printf("do_send_out_report (oor_items=%d, ready_to_send=%s, retry_pending=%s)\n", oor_items, ready_to_send ? "Yes" : "No", retry_pending ? "Yes" : "No");
+#endif
 
     if ((oor_items > 0) && ready_to_send) {
         // Back off after a failed send to avoid hammering the USB stack

@@ -271,10 +271,17 @@ void tuh_midi_rx_cb(uint8_t dev_addr, uint32_t num_packets) {
 }
 
 void queue_out_report(uint16_t interface, uint8_t report_id, const uint8_t* buffer, uint8_t len) {
+#if CFG_TUD_CDC
+    printf("queue_out_report (interface=%d, report_id=%d, len=%d)\n", interface, report_id, len);
+#endif
+
     do_queue_out_report(buffer, len, report_id, interface >> 8, interface & 0xFF, OutType::OUTPUT);
 }
 
 void queue_set_feature_report(uint16_t interface, uint8_t report_id, const uint8_t* buffer, uint8_t len) {
+#if CFG_TUD_CDC
+    printf("queue_set_feature_report (interface=%d, report_id=%d, len=%d)\n", interface, report_id, len);
+#endif
     do_queue_out_report(buffer, len, report_id, interface >> 8, interface & 0xFF, OutType::SET_FEATURE);
 }
 
