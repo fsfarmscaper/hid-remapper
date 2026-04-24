@@ -117,7 +117,7 @@ void g923_on_mount(uint8_t dev_addr, uint8_t instance, uint16_t vid, uint16_t pi
 
     if (pid == G923_PID_XBOX) {
         g923_dev_addr = dev_addr;
-        g923_instance = 0 // TODO: PA temporary fix instance to 0 for testing LED control;
+        g923_instance = 0; // TODO: PA temporary fix instance to 0 for testing LED control;
         g923_xbox = true;
         g923_led_feat_idx = 0;
         g923_led_enabled = false;
@@ -319,6 +319,7 @@ bool g923_enable_leds(void) {
     uint8_t params[] = { 0x02, 0x00 };
     bool ok = hidpp_send_long(g923_led_feat_idx, G923_LED_FUNC_SET_MODE, params, sizeof(params));
     if (ok) g923_led_enabled = true;
+    sleep_ms(100);
 #if CFG_TUD_CDC
     printf("g923_enable_leds: LEDs enabled (%s)\n", ok ? "success" : "failed");
 #endif
