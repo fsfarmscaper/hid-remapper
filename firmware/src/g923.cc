@@ -117,7 +117,7 @@ void g923_on_mount(uint8_t dev_addr, uint8_t instance, uint16_t vid, uint16_t pi
 
     if (pid == G923_PID_XBOX) {
         g923_dev_addr = dev_addr;
-        g923_instance = instance;
+        g923_instance = 0 // TODO: PA temporary fix instance to 0 for testing LED control;
         g923_xbox = true;
         g923_led_feat_idx = 0;
         g923_led_enabled = false;
@@ -357,6 +357,7 @@ void g923_init_leds(void) {
     g923_discover_led_feature();
     // TODO: wait for IRoot response before enabling
     g923_enable_leds();
+    g923_set_leds(1);  // start with only 1x green LEDs on until we get pedal input
 }
 
 // Simulate RPM from pedal inputs (call from report callback)
