@@ -80,7 +80,9 @@ void do_send_out_report() {
     }
 
 #if CFG_TUD_CDC
-    printf("do_send_out_report (oor_items=%d, ready_to_send=%s, retry_pending=%s)\n", oor_items, ready_to_send ? "Yes" : "No", retry_pending ? "Yes" : "No");
+    if (oor_items > 0) {
+        printf("do_send_out_report (oor_items=%d, rts=%s, in_retry=%s)\n", oor_items, ready_to_send ? "Yes" : "No", retry_pending ? "Yes" : "No");
+    }
 #endif
 
     if ((oor_items > 0) && ready_to_send) {
