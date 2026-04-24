@@ -1,5 +1,6 @@
 #include "xbox.h"
 #include "constants.h"
+#include "g923.h"
 #include "remapper.h"
 
 #define NXDEVS 8
@@ -142,10 +143,14 @@ static uint8_t init1[] = { 0x05, 0x20, 0x01, 0x01, 0x00 };
 static uint8_t init2[] = { 0x05, 0x20, 0x02, 0x0f, 0x06 };
 static uint8_t init3[] = { 0x06, 0x20, 0x03, 0x02, 0x01, 0x00 };
 
+// G923 Xbox→PC mode switch payload (usb_modeswitch MessageContent="0f00010142")
+static uint8_t g923_mode_switch[] = { 0x0F, 0x00, 0x01, 0x01, 0x42 };
+
 enum class XType : int8_t {
     UNKNOWN = 0,
     XBOX_360 = 1,
     XBOX_ONE = 2,
+    G923_PRE = 3,  // G923 in Xbox mode (0xC26D), needs mode switch to PC mode (0xC26E)
 };
 
 struct xdev_t {
@@ -207,7 +212,17 @@ bool xboxh_open(uint8_t rhport, uint8_t dev_addr, tusb_desc_interface_t const* d
         return false;
     }
 
-    if ((desc_itf->bNumEndpoints == 2) &&
+    // Check for G923 in Xbox mode (0xC26D) BEFORE generic Xbox matching.
+    // It uses vendor-class interfaces like Xbox controllers but needs a mode
+    // switch to PC mode (0xC26E) before it can be used as HID.
+    uint16_t vid, pid;
+    tuh_vid_pid_get(dev_addr, &vid, &pid);
+    if (vid == G923_VENDOR_ID && pid == G923_PID_XBOX_PRE &&
+        desc_itf->bInterfaceClass == 255 &&
+        desc_itf->bInterfaceNumber == 0 &&
+        desc_itf->bNumEndpoints >= 2) {
+        xdev->type = XType::G923_PRE;
+    } else if ((desc_itf->bNumEndpoints == 2) &&
         (desc_itf->bInterfaceClass == 255) &&
         (desc_itf->bInterfaceSubClass == 71) &&
         (desc_itf->bInterfaceProtocol == 208)) {
@@ -331,6 +346,16 @@ bool xboxh_set_config(uint8_t dev_addr, uint8_t itf_num) {
     }
 
     switch (xdev->type) {
+        case XType::G923_PRE:
+            // Send mode switch on interrupt OUT endpoint.
+            // Device will disconnect and re-enumerate as 0xC26E (PC mode).
+            // TinyUSB HID driver will then mount it and tuh_hid_mount_cb fires.
+#if CFG_TUD_CDC
+            printf("G923: sending Xbox->PC mode switch via OUT ep 0x%02x\n", xdev->out_ep);
+#endif
+            xxfer_out(xdev, g923_mode_switch, sizeof(g923_mode_switch));
+            usbh_driver_set_config_complete(dev_addr, itf_num);
+            break;
         case XType::XBOX_ONE:
             xdev->setup_stage = 1;
             process_setup(xdev);
@@ -366,6 +391,9 @@ bool xboxh_xfer_cb(uint8_t dev_addr, uint8_t ep_addr, xfer_result_t result, uint
     }
 
     switch (xdev->type) {
+        case XType::G923_PRE:
+            // Mode switch sent, device will re-enumerate. Nothing more to do.
+            break;
         case XType::XBOX_ONE:
             if (ep_addr == xdev->in_ep) {
                 if (xferred_bytes > 0) {

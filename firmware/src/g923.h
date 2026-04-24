@@ -20,12 +20,14 @@
 #define HIDPP_PAGE_FORCE_FEEDBACK    0x8123  // Wheel range, spring, damper
 #define HIDPP_PAGE_AXIS_SENSITIVITY  0x80A3  // Per-axis sensitivity
 #define HIDPP_PAGE_AXIS_MODE         0x8120  // Axis response curve / profile
+#define HIDPP_PAGE_LED_CTRL          0x807A  // "Adjustable Configuration" — LED control
 
 // Confirmed runtime feature indices (from IFeatureSet enumeration)
 // These are fixed for the G923 Xbox firmware — no discovery needed
 #define G923_FIDX_FORCE_FEEDBACK    0x0B  // Feature 0x8123
 #define G923_FIDX_AXIS_SENSITIVITY  0x14  // Feature 0x80A3
 #define G923_FIDX_AXIS_MODE         0x0A  // Feature 0x8120
+#define G923_FIDX_LED_CTRL          0x12  // Feature 0x807A
 
 // Force Feedback functions (Feature 0x8123)
 #define G923_FFB_FUNC_SET_SPRING    2  // Set spring effect (Very Long)
@@ -37,6 +39,15 @@
 #define G923_SENS_FUNC_GET_INFO     1  // Get axis info
 #define G923_SENS_FUNC_GET_SENS     2  // Get sensitivity
 #define G923_SENS_FUNC_SET_SENS     3  // Set sensitivity
+
+// LED Control functions (Feature 0x807A)
+#define G923_LED_FUNC_GET_INFO      0  // -> [03:05:02]
+#define G923_LED_FUNC_GET_STATE     1  // -> [00:02]
+#define G923_LED_FUNC_RESET         2
+#define G923_LED_FUNC_SET_MODE      3  // param 0x02 = enable LED writes (THE UNLOCK)
+#define G923_LED_FUNC_SET_CONFIG    4  // -> [00:05]
+#define G923_LED_FUNC_SET_LEDS      6  // LED data payload
+#define G923_LED_FUNC_GET_DETAILS   7  // -> [00:01:00:05]
 
 // Axis indices (from capture analysis)
 #define G923_AXIS_STEERING    0  // X, 16-bit
@@ -53,6 +64,9 @@
 #define G923_SENS_MIN    0x01  // 1%
 #define G923_SENS_DEFAULT 0x32 // 50%
 #define G923_SENS_MAX    0x64  // 100%
+
+// Rev counter stage input
+#define G923_STAGE_AUTO  0xFF  // auto-shift mode (no manual override)
 
 // Device lifecycle
 void g923_on_mount(uint8_t dev_addr, uint8_t instance, uint16_t vid, uint16_t pid);
@@ -76,6 +90,12 @@ bool g923_set_sensitivity(uint8_t axis, uint8_t sensitivity);
 
 // PlayStation/PC variant: raw LED control
 bool g923_set_leds_ps(uint8_t setting);
+
+// Xbox/PC LED control (Feature 0x807A)
+bool g923_enable_leds();
+bool g923_set_leds(uint8_t level);  // 0=off, 1-5=progressive RPM bar
+void g923_init_leds();
+void g923_simulate_rev_counter(uint8_t accelerator, uint8_t brake, uint8_t stage_input);
 
 // Apply default settings on connect
 void g923_apply_defaults();

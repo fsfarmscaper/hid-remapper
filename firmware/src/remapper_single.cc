@@ -138,8 +138,6 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* desc_re
 
     descriptor_received_callback(vid, pid, desc_report, desc_len, (uint16_t) (dev_addr << 8) | instance, hub_port, itf_num);
 
-    device_connected_callback((uint16_t) (dev_addr << 8) | instance, vid, pid, hub_port);
-
     x52_on_mount(dev_addr, vid, pid);
 
     // Set connection flags BEFORE on_mount calls so display updates
@@ -218,6 +216,7 @@ void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t cons
     // Update head tracker MFD display
     if (dev_addr == ht_dev_addr && len >= 4) {
         int16_t headX_centered = (int16_t)(report[2] | (report[3] << 8));
+        last_ht_x = headX_centered;
         x52_update_ht_display(x52_get_dev_addr(), headX_centered, ht_paused);
     }
 
@@ -234,6 +233,26 @@ void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t cons
     // Process X52 reports (brightness, button state machine)
     if (dev_addr == x52_get_dev_addr()) {
         handle_ht_action(x52_process_report(report, len, ht_dev_addr != 0));
+    }
+
+    // G923 RPM LED simulation from pedal inputs
+    // Report 0x01: [6]=Y accelerator, [7]=Z brake (both 0-255)
+    // H-shifter gear buttons in report bytes [1-2]:
+    //   byte[1] bit7 = btn12 Reverse, byte[2] bits 0-5 = btn13-18 Gear 1-6
+    // TODO: confirm bit positions match actual HID usage mappings
+    if (dev_addr == g923_get_dev_addr() && len >= 8) {
+        uint8_t stage = G923_STAGE_AUTO;
+        if (len >= 3) {
+            if      (report[2] & 0x01) stage = 1;  // btn13 = Gear 1
+            else if (report[2] & 0x02) stage = 2;  // btn14 = Gear 2
+            else if (report[2] & 0x04) stage = 3;  // btn15 = Gear 3
+            else if (report[2] & 0x08) stage = 4;  // btn16 = Gear 4
+            else if (report[2] & 0x10) stage = 5;  // btn17 = Gear 5
+            else if (report[2] & 0x20) stage = 6;  // btn18 = Gear 6
+            else if (report[1] & 0x80) stage = 7;  // btn12 = Reverse
+            else                       stage = G923_STAGE_AUTO;  // neutral = auto
+        }
+        g923_simulate_rev_counter(report[6], report[7], stage);
     }
 
     tuh_hid_receive_report(dev_addr, instance);

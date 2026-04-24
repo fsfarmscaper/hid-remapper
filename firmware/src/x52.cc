@@ -202,7 +202,9 @@ static void mfd_set_line_cached(uint8_t dev_addr, uint8_t line, const char* text
 }
 
 static void build_mfd_bar(char* buf, int16_t value, int16_t range) {
-    int pos = (int)((((float)value / range) + 1.0f) * 7.5f + 0.5f);
+    // Integer equivalent of: (value/range + 1.0) * 7.5 + 0.5
+    // = (value + range) * 15 / (2 * range) + rounding
+    int pos = ((int)(value + range) * 15 + range) / (2 * range);
     if (pos < 0) pos = 0;
     if (pos > 15) pos = 15;
     static const char blank_bar[] = "--------+-------";

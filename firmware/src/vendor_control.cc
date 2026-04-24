@@ -40,13 +40,18 @@ bool queue_vendor_control_transfer(
     uint16_t wLength,
     uint32_t timeout_ms
 ) {
+    (void)timeout_ms;
     if (vcq_items == VENDOR_CONTROL_BUFSIZE) {
+#if CFG_TUD_CDC
         printf("vendor_control queue overflow!\n");
+#endif
         return false;
     }
     
     if (wLength > sizeof(vendor_control_queue[vcq_tail].data)) {
+#if CFG_TUD_CDC
         printf("vendor_control data too large (%u > %zu)\n", wLength, sizeof(vendor_control_queue[vcq_tail].data));
+#endif
         return false;
     }
     
@@ -87,7 +92,9 @@ void process_vendor_control_transfers() {
             vcq_head = (vcq_head + 1) % VENDOR_CONTROL_BUFSIZE;
             vcq_items--;
         } else {
+#if CFG_TUD_CDC
             printf("process_vendor_control: tuh_control_xfer failed!\n");
+#endif
         }
     }
 }
