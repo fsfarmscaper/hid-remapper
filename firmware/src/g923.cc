@@ -7,6 +7,7 @@
 // For Very Long payloads (spring effect), Report ID 0x12 (64 bytes) is used.
 // Responses arrive as HID input reports.
 
+#include <tusb.h>
 #include <cstdio>
 #include <cstring>
 
@@ -109,11 +110,10 @@ static bool hidpp_send_vlong(uint8_t feat_idx, uint8_t func_id, const uint8_t* p
 // ============================================================
 
 void g923_on_mount(uint8_t dev_addr, uint8_t instance, uint16_t vid, uint16_t pid) {
-    if (vid != G923_VENDOR_ID) return;
-
 #if CFG_TUD_CDC
-        printf("g923_on_mount (addr=%d, inst=%d, vid=%d, pid=%d)\n", dev_addr, instance, vid, pid);
+    printf("g923_on_mount (addr=%d, inst=%d, vid=%d, pid=%d)\n", dev_addr, instance, vid, pid);
 #endif
+    if (vid != G923_VENDOR_ID) return;
 
     if (pid == G923_PID_XBOX) {
         g923_dev_addr = dev_addr;
