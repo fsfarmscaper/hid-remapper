@@ -42,6 +42,9 @@ static const uint16_t g923_led_levels[] = {
     0xFFFF,  // 5: All on (2x blue + 2x green + 2x red)
 };
 
+// Initialize to an invalid level to ensure the first update goes through
+static uint8_t g923_led_last_level = -1;
+
 // Composite interface handle for queue_out_report()
 static uint16_t g923_iface() {
     return (uint16_t)(g923_dev_addr << 8) | g923_instance;
@@ -417,7 +420,10 @@ void g923_simulate_rev_counter(uint8_t accelerator, uint8_t brake, uint8_t stage
     else if (rpm_pct <= 80) level = 4;
     else                    level = 5;
 
-    g923_set_leds(level);
+    if (level != g923_led_last_level) {
+        g923_set_leds(level);
+        g923_led_last_level = level;
+    }
 }
 
 // ============================================================

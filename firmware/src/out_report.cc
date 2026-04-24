@@ -32,6 +32,7 @@ static bool retry_pending = false;
 #define RETRY_DELAY_MS 50
 
 void do_queue_out_report(const uint8_t* report, uint16_t len, uint8_t report_id, uint8_t dev_addr, uint8_t interface, OutType type) {
+    // TODO: PA Buffer overflow handling — currently just drops new reports when full, so needs rate limiting on the caller side to avoid silent drops. Could return false here and let caller decide whether to retry or drop. For GET_REPORT, caller must retry since there's no report data in the queue.
     if (oor_items == OOR_BUFSIZE) {
         printf("out overflow!\n");
         return;

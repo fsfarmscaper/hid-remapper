@@ -354,7 +354,10 @@ bool xboxh_set_config(uint8_t dev_addr, uint8_t itf_num) {
             printf("G923: sending Xbox->PC mode switch via OUT ep 0x%02x\n", xdev->out_ep);
 #endif
             xxfer_out(xdev, g923_mode_switch, sizeof(g923_mode_switch));
-            usbh_driver_set_config_complete(dev_addr, itf_num);
+
+            // TODO: PA this should likely be a close call instead to disconnect immediately
+            xboxh_close(dev_addr);
+            //usbh_driver_set_config_complete(dev_addr, itf_num);
             break;
         case XType::XBOX_ONE:
             xdev->setup_stage = 1;
