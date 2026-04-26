@@ -1,3 +1,4 @@
+#include <tusb.h>
 #include "xbox.h"
 #include "constants.h"
 #include "g923.h"
@@ -351,7 +352,7 @@ bool xboxh_set_config(uint8_t dev_addr, uint8_t itf_num) {
             // Device will disconnect and re-enumerate as 0xC26E (PC mode).
             // TinyUSB HID driver will then mount it and tuh_hid_mount_cb fires.
 #if CFG_TUD_CDC
-            printf("G923: sending Xbox->PC mode switch via OUT ep 0x%02x\n", xdev->out_ep);
+            printf("G923: Sending Xbox->PC mode switch via interrupt OUT ep 0x%02x\n", xdev->out_ep);
 #endif
             xxfer_out(xdev, g923_mode_switch, sizeof(g923_mode_switch));
             break;
@@ -393,8 +394,12 @@ bool xboxh_xfer_cb(uint8_t dev_addr, uint8_t ep_addr, xfer_result_t result, uint
         case XType::G923_PRE:
             if (ep_addr == xdev->out_ep) {
 #if CFG_TUD_CDC
-                printf("G923: mode switch sent, waiting for re-enumeration\n");
-#endif                
+                if (result != XFER_RESULT_SUCCESS) {
+                    printf("G923: Xbox->PC mode switch interrupt OUT failed (result=%d) — device may not re-enumerate correctly\n", result);
+                } else {
+                    printf("G923: Xbox->PC mode switch interrupt OUT success - waiting for re-enumeration\n");
+                }
+#endif
                 uint8_t dev = xdev->dev_addr;
                 uint8_t itf = xdev->itf_num;
 
