@@ -8,7 +8,7 @@
 #define CFG_TUSB_MEM_ALIGN __attribute__((aligned(4)))
 
 // Enable TinyUSB debug logging (level 2 = info + warnings)
-#define CFG_TUSB_DEBUG 2
+#define CFG_TUSB_DEBUG 3
 
 // Redirect debug logging to custom CDC function
 #define CFG_TUSB_DEBUG_PRINTF cdc_debug_printf
