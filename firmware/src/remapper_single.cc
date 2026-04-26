@@ -234,6 +234,10 @@ void report_received_callback(uint8_t dev_addr, uint8_t instance, uint8_t const*
 }
 
 void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* report, uint16_t len) {
+#if CFG_TUD_CDC
+    printf("tuh_hid_report_received_cb (addr=%d, inst=%d, len=%d)\n", dev_addr, instance, len);
+#endif
+
     // Apply shift mode throttle scaling before remapper sees the report
     if (dev_addr == x52_get_dev_addr()) {
         x52_apply_shift((uint8_t*)report, len);
