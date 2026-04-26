@@ -444,7 +444,10 @@ bool xboxh_xfer_cb(uint8_t dev_addr, uint8_t ep_addr, xfer_result_t result, uint
 void xboxh_close(uint8_t dev_addr) {
     for (int i = 0; i < NXDEVS; i++) {
         if (xdevs[i].dev_addr == dev_addr) {
-            umount_callback(dev_addr, xdevs[i].itf_num);
+            // G923_PRE was never mounted at remapper level — skip umount callback
+            if (xdevs[i].type != XType::G923_PRE) {
+                umount_callback(dev_addr, xdevs[i].itf_num);
+            }
             xdevs[i] = {};
         }
     }
