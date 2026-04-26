@@ -476,10 +476,11 @@ bool g923_set_leds(uint8_t level) {
 void g923_on_hidpp_response(const uint8_t* report, uint16_t len) {
 
     // After TinyUSB strips report ID:
-    // report[0] = device_index (0xFF)
-    // report[1] = feat_idx echo
-    // report[2] = func|sw_id echo  (func in upper nibble, sw_id in lower)
-    // report[3+] = response params
+    // report[0] = report id (0x12)
+    // report[1] = device_index (0xFF)
+    // report[2] = feat_idx echo
+    // report[3] = func|sw_id echo  (func in upper nibble, sw_id in lower)
+    // report[4+] = response params
 
     if (g923_init_state == G923_INIT_MOUNTED) {
 #if CFG_TUD_CDC
@@ -491,12 +492,11 @@ void g923_on_hidpp_response(const uint8_t* report, uint16_t len) {
     }
 
     // All other states: must be a valid HID++ response
-    //if (len < 4 || report[0] != HIDPP_DEVICE_INDEX) return;
-    if (len < 6 ) return;
+    if (len < 6 || report[1] != HIDPP_DEVICE_INDEX) return;
 
 #if CFG_TUD_CDC
     // Safe to read [1],[2],[3] now — len >= 4 guaranteed above
-    printf("g923_on_hidpp_response: state=%d, idx=0x%02X feat=0x%02X func=0x%02X p[3]=0x%02X p[4]=0x%02X p[5]=0x%02X\n",
+    printf("g923_on_hidpp_response: state=%d, rid=0x%02X idx=0x%02X feat=0x%02X func=0x%02X p[4]=0x%02X p[5]=0x%02X\n",
            g923_init_state, report[0], report[1], report[2], report[3], report[4], report[5]);
 #endif
 
@@ -505,7 +505,7 @@ void g923_on_hidpp_response(const uint8_t* report, uint16_t len) {
         case G923_INIT_WAIT_IROOT:
             // IRoot response: report[3] = runtime feature index for queried page
             // Confirmed from Python script: runtime index for 0x807A = 0x12
-            g923_led_feat_idx = report[3];
+            g923_led_feat_idx = report[4];
 #if CFG_TUD_CDC
             printf("g923: IRoot response — LED feat_idx=0x%02X\n", g923_led_feat_idx);
 #endif
@@ -522,9 +522,9 @@ void g923_on_hidpp_response(const uint8_t* report, uint16_t len) {
 
         case G923_INIT_WAIT_LED_ENABLE:
             // HID++ error response: feat_idx=0xFF, func=0xFF, error code in report[3]
-            if (report[1] == 0xFF && report[2] == 0xFF) {
+            if (report[2] == 0xFF && report[3] == 0xFF) {
 #if CFG_TUD_CDC
-                printf("g923: LED enable error 0x%02X (NOT_ALLOWED=0x05)\n", report[3]);
+                printf("g923: LED enable error 0x%02X (NOT_ALLOWED=0x05)\n", report[4]);
 #endif
                 g923_init_state = G923_INIT_IDLE;
                 return;
