@@ -44,7 +44,10 @@ static const uint16_t g923_led_levels[] = {
 };
 
 // Initialize to an invalid level to ensure the first update goes through
-static uint8_t g923_led_last_level = -1;
+static uint8_t g923_led_last_level = 0xFF;
+
+// HID++ init state machine
+static g923_init_state_t g923_init_state = G923_INIT_IDLE;
 
 // Composite interface handle for queue_out_report()
 static uint16_t g923_iface() {
@@ -401,15 +404,15 @@ bool g923_set_leds_ps(uint8_t setting) {
 // TODO: parse IRoot response to extract runtime index dynamically
 static bool g923_discover_led_feature(void) {
 #if CFG_TUD_CDC
-    printf("g923_discover_led_feature\n");
+    printf("g923_discover_led_feature: sending IRoot query for page 0x%04X\n",
+           HIDPP_PAGE_LED_CTRL);
 #endif
-
     uint8_t params[] = {
         (uint8_t)(HIDPP_PAGE_LED_CTRL >> 8),
         (uint8_t)(HIDPP_PAGE_LED_CTRL & 0xFF)
     };
-    // Use known default from pcap for now:
-    g923_led_feat_idx = G923_FIDX_LED_CTRL;
+    // Do NOT set g923_led_feat_idx here — extracted from IRoot response in
+    // g923_on_hidpp_response() state G923_INIT_WAIT_IROOT
     return hidpp_send_long(0x00, 0x00, params, sizeof(params));
 }
 
@@ -418,16 +421,13 @@ static bool g923_discover_led_feature(void) {
 // Without this, func 6 LED commands return NOT_ALLOWED (0x05).
 bool g923_enable_leds(void) {
 #if CFG_TUD_CDC
-    printf("g923_enable_leds\n");
+    printf("g923_enable_leds: sending func3 unlock (feat_idx=0x%02X)\n",
+           g923_led_feat_idx);
 #endif
     if (!g923_led_feat_idx) return false;
     uint8_t params[] = { 0x02, 0x00 };
-    bool ok = hidpp_send_long(g923_led_feat_idx, G923_LED_FUNC_SET_MODE, params, sizeof(params));
-    if (ok) g923_led_enabled = true;
-#if CFG_TUD_CDC
-    printf("g923_enable_leds: LEDs enabled (%s)\n", ok ? "success" : "failed");
-#endif
-    return ok;
+    // Do NOT set g923_led_enabled here — set after ack in G923_INIT_WAIT_LED_ENABLE
+    return hidpp_send_long(g923_led_feat_idx, G923_LED_FUNC_SET_MODE, params, sizeof(params));
 }
 
 // Set LED level (0-5)
@@ -452,17 +452,88 @@ bool g923_set_leds(uint8_t level) {
     }
 }
 
+// ============================================================
+// HID++ init state machine response handler
+// ============================================================
+
+void g923_on_hidpp_response(const uint8_t* report, uint16_t len) {
+    if (len < 4) return;
+
+    // After TinyUSB strips report ID:
+    // report[0] = device_index (0xFF)
+    // report[1] = feat_idx echo
+    // report[2] = func|sw_id echo  (func in upper nibble, sw_id in lower)
+    // report[3+] = response params
+
+#if CFG_TUD_CDC
+    printf("g923_on_hidpp_response: state=%d feat=0x%02X func=0x%02X p[3]=0x%02X\n",
+           g923_init_state, report[1], report[2], report[3]);
+#endif
+
+    switch (g923_init_state) {
+
+        case G923_INIT_WAIT_IROOT:
+            // IRoot response: report[3] = runtime feature index for queried page
+            // Confirmed from Python script: runtime index for 0x807A = 0x12
+            g923_led_feat_idx = report[3];
+#if CFG_TUD_CDC
+            printf("g923: IRoot response — LED feat_idx=0x%02X\n", g923_led_feat_idx);
+#endif
+            if (g923_led_feat_idx == 0) {
+#if CFG_TUD_CDC
+                printf("g923: LED feature 0x807A not found on device, aborting init\n");
+#endif
+                g923_init_state = G923_INIT_IDLE;
+                return;
+            }
+            g923_init_state = G923_INIT_WAIT_LED_ENABLE;
+            g923_enable_leds();
+            break;
+
+        case G923_INIT_WAIT_LED_ENABLE:
+            // HID++ error response: feat_idx=0xFF, func=0xFF, error code in report[3]
+            if (report[1] == 0xFF && report[2] == 0xFF) {
+#if CFG_TUD_CDC
+                printf("g923: LED enable error 0x%02X (NOT_ALLOWED=0x05)\n", report[3]);
+#endif
+                g923_init_state = G923_INIT_IDLE;
+                return;
+            }
+            g923_led_enabled = true;
+#if CFG_TUD_CDC
+            printf("g923: LED enable ack — sending func6 set\n");
+#endif
+            g923_init_state = G923_INIT_WAIT_LED_SET;
+            g923_set_leds(1);
+            break;
+
+        case G923_INIT_WAIT_LED_SET:
+#if CFG_TUD_CDC
+            printf("g923: LED set ack — init complete\n");
+#endif
+            g923_init_state = G923_INIT_DONE;
+            break;
+
+        case G923_INIT_DONE:
+            // Post-init responses (FFB acks etc.) — no handling needed yet
+            break;
+
+        case G923_INIT_IDLE:
+        default:
+            break;
+    }
+}
+
 // Full LED init — discover feature + enable
 void g923_init_leds(void) {
 #if CFG_TUD_CDC
-    printf("g923_init_leds\n");
+    printf("g923_init_leds: starting IRoot discovery\n");
 #endif
-
     if (!g923_dev_addr || !g923_xbox) return;
+    g923_init_state = G923_INIT_WAIT_IROOT;
     g923_discover_led_feature();
-    // TODO: wait for IRoot response before enabling
-    g923_enable_leds();
-    g923_set_leds(1);  // start with only 1x green LEDs on until we get pedal input
+    // g923_enable_leds() and g923_set_leds() are called from
+    // g923_on_hidpp_response() as each ack arrives
 }
 
 // Simulate RPM from pedal inputs (call from report callback)
@@ -560,12 +631,13 @@ void g923_simulate_rev_counter(uint8_t accelerator, uint8_t brake, uint8_t stage
 // ============================================================
 // Default settings applied on connect
 // ============================================================
-
 void g923_apply_defaults() {
 #if CFG_TUD_CDC
     printf("g923_apply_defaults\n");
 #endif
-
+    g923_init_state   = G923_INIT_IDLE;
+    g923_led_feat_idx = 0;
+    g923_led_enabled  = false;
 
     // TODO: PA check if updating these settings requires a mode unlock first.
 
@@ -586,4 +658,14 @@ void g923_apply_defaults() {
 
     // LED unlock: discover feature 0x807A + enable LED writes
     g923_init_leds();
+
+    // FFB and sensitivity left commented out pending LED init confirmation
 }
+
+// ============================================================
+// Test accessors (UNIT_TEST builds only)
+// ============================================================
+#ifdef UNIT_TEST
+g923_init_state_t g923_init_state_get() { return g923_init_state; }
+uint8_t           g923_led_feat_idx_get() { return g923_led_feat_idx; }
+#endif

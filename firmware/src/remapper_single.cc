@@ -286,6 +286,17 @@ void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t cons
     //     g923_simulate_rev_counter(report[6], report[7], stage);
     // }
 
+    // G923 HID++ response routing
+    // All 0x11 requests return 0x12 VLong responses (confirmed from Python capture).
+    // TinyUSB strips report ID before callback so report[0] = device_index (0xFF).
+    // Filter by stored HID++ instance to avoid routing gamepad reports here.
+    if (dev_addr == g923_hidpp_dev_addr &&
+        instance == g923_hidpp_instance &&
+        len >= 4 &&
+        report[0] == HIDPP_DEVICE_INDEX) {
+        g923_on_hidpp_response(report, len);
+    }
+
     tuh_hid_receive_report(dev_addr, instance);
 }
 

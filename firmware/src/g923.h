@@ -90,6 +90,29 @@ bool g923_check_hidpp_interface(uint8_t dev_addr, uint8_t instance,
                                 uint8_t itf_num,
                                 const uint8_t* desc_report, uint16_t desc_len);
 
+// ============================================================
+// HID++ init state machine (Phase 3)
+// ============================================================
+
+typedef enum {
+    G923_INIT_IDLE            = 0,
+    G923_INIT_WAIT_IROOT      = 1,  // sent IRoot query, awaiting feature index response
+    G923_INIT_WAIT_LED_ENABLE = 2,  // sent func3 enable, awaiting ack
+    G923_INIT_WAIT_LED_SET    = 3,  // sent func6 set, awaiting ack
+    G923_INIT_DONE            = 4,
+} g923_init_state_t;
+
+// Called from tuh_hid_report_received_cb for HID++ responses on the HID++ instance.
+// 0x11 requests always return 0x12 VLong responses (confirmed from Python capture).
+// TinyUSB strips the report ID before the callback so report[0] = device_index (0xFF).
+void g923_on_hidpp_response(const uint8_t* report, uint16_t len);
+
+// Test accessors — only compiled when UNIT_TEST is defined
+#ifdef UNIT_TEST
+g923_init_state_t g923_init_state_get(void);
+uint8_t           g923_led_feat_idx_get(void);
+#endif
+
 // Device lifecycle
 void g923_on_mount(uint8_t dev_addr, uint8_t instance, uint16_t vid, uint16_t pid,
                    uint8_t itf_num,
