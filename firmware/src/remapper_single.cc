@@ -60,6 +60,21 @@ static bool __no_inline_not_in_flash_func(manual_sof)(repeating_timer_t* rt) {
 
 static repeating_timer_t sof_timer;
 
+// G923 deferred hub port reset state
+// Written from sof_callback (1ms timer), read from read_report (main loop)
+static volatile uint32_t g923_reset_countdown_ms = 0;
+static volatile bool     g923_do_port_reset       = false;
+static uint8_t           g923_reset_hub_addr       = 0;
+static uint8_t           g923_reset_hub_port       = 0;
+
+void g923_schedule_port_reset(uint8_t hub_addr, uint8_t hub_port, uint32_t delay_ms) {
+    g923_reset_hub_addr      = hub_addr;
+    g923_reset_hub_port      = hub_port;
+    g923_reset_countdown_ms  = delay_ms;
+    g923_do_port_reset       = false;
+}
+
+
 void extra_init() {
     pio_usb_configuration_t pio_cfg = PIO_USB_DEFAULT_CONFIG;
     pio_cfg.pin_dp = PICO_DEFAULT_PIO_USB_DP_PIN;
@@ -87,6 +102,18 @@ void read_report(bool* new_report, bool* tick) {
 
     reports_received = false;
     tuh_task();
+
+    // Execute deferred G923 hub port reset if countdown expired
+    if (g923_do_port_reset && g923_reset_hub_addr != 0) {
+        g923_do_port_reset = false;
+#if CFG_TUD_CDC
+        printf("G923: hub port reset (hub=%d port=%d)\n",
+               g923_reset_hub_addr, g923_reset_hub_port);
+#endif
+        tuh_hub_port_reset(g923_reset_hub_addr, g923_reset_hub_port, NULL);
+        g923_reset_hub_addr = 0;
+        g923_reset_hub_port = 0;
+    }    
     
     // Service device mode (CDC for debug output)
     tud_task();
@@ -151,11 +178,11 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* desc_re
 #endif
     }
 
-    if (vid == G923_VENDOR_ID && pid == G923_PID_XBOX) {
+    if (vid == G923_VENDOR_ID && pid == G923_PID_XBOXVAR_PCMODE) {
         x52_set_g923_connected(true);
 #if CFG_TUD_CDC
         printf("Logitech G923 in PC Mode detected (addr=%d, vid=%d, pid=%d)\n", dev_addr, vid, pid);
-        printf("Logitech G923 in PC Mode detected (addr=%d, inst=%d, itf_num=%d)\n", ht_dev_addr, ht_instance, itf_num);
+        printf("Logitech G923 in PC Mode detected (addr=%d, inst=%d, itf_num=%d)\n", dev_addr, instance, itf_num);
 #endif
     }
 
@@ -168,7 +195,7 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* desc_re
     }
 
     // on_mount after connection flags so MFD display sees correct state
-    g923_on_mount(dev_addr, instance, vid, pid);
+    g923_on_mount(dev_addr, instance, vid, pid, itf_num, desc_report, desc_len);
 
     tuh_hid_receive_report(dev_addr, instance);
 }
@@ -298,6 +325,11 @@ void send_out_report() {
 }
 
 void __no_inline_not_in_flash_func(sof_callback)() {
+    if (g923_reset_countdown_ms > 0) {
+        if (--g923_reset_countdown_ms == 0) {
+            g923_do_port_reset = true;
+        }
+    }
 }
 
 void get_report_cb(uint8_t dev_addr, uint8_t interface, uint8_t report_id, uint8_t report_type, uint8_t* report, uint16_t len) {

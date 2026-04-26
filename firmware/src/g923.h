@@ -4,10 +4,10 @@
 #include <stdint.h>
 
 // Device identification
-#define G923_VENDOR_ID     0x046D
-#define G923_PID_XBOX      0xC26E  // Xbox/PC variant in PC mode (HID++ 2.0)
-#define G923_PID_XBOX_PRE  0xC26D  // Xbox/PC variant before mode switch
-#define G923_PID_PS        0xC266  // PlayStation/PC variant (raw HID)
+#define G923_VENDOR_ID             0x046D
+#define G923_PID_XBOXVAR_XBOXMODE  0xC26D  // Xbox/PC variant in Xbox mode before mode switch
+#define G923_PID_XBOXVAR_PCMODE    0xC26E  // Xbox/PC variant in PC mode after mode (HID++ 2.0)
+#define G923_PID_PSVAR             0xC266  // PlayStation/PC variant (raw HID)
 
 // HID++ 2.0 constants
 #define HIDPP_DEVICE_INDEX 0xFF   // USB-connected (not via receiver)
@@ -68,8 +68,32 @@
 // Rev counter stage input
 #define G923_STAGE_AUTO  0xFF  // auto-shift mode (no manual override)
 
+// ============================================================
+// HID++ interface identification (Phase 2)
+// ============================================================
+
+// G923 PC mode HID++ channel — confirmed from Python hidapi capture
+// Col02 (write): Usage Page 0xFF43, Usage 0x0602 — send 0x11 Long reports here
+// Col03 (read):  Usage Page 0xFF43, Usage 0x0604 — 0x12 VLong responses arrive here
+#define G923_HIDPP_USAGE_PAGE    0xFF43
+#define G923_HIDPP_USAGE_WRITE   0x0602   // Col02 — the interface to match and store
+#define G923_HIDPP_USAGE_READ    0x0604   // Col03 — informational, same iface/instance
+
+// Stored at mount time by g923_check_hidpp_interface()
+extern uint8_t g923_hidpp_dev_addr;
+extern uint8_t g923_hidpp_instance;
+extern uint8_t g923_hidpp_itf_num;
+
+// Called from tuh_hid_mount_cb for every G923 interface mount.
+// Returns true if this interface is the HID++ write channel (Col02).
+bool g923_check_hidpp_interface(uint8_t dev_addr, uint8_t instance,
+                                uint8_t itf_num,
+                                const uint8_t* desc_report, uint16_t desc_len);
+
 // Device lifecycle
-void g923_on_mount(uint8_t dev_addr, uint8_t instance, uint16_t vid, uint16_t pid);
+void g923_on_mount(uint8_t dev_addr, uint8_t instance, uint16_t vid, uint16_t pid,
+                   uint8_t itf_num,
+                   const uint8_t* desc_report, uint16_t desc_len);
 void g923_on_unmount(uint8_t dev_addr);
 uint8_t g923_get_dev_addr();
 bool g923_is_xbox();

@@ -147,6 +147,10 @@ static uint8_t init3[] = { 0x06, 0x20, 0x03, 0x02, 0x01, 0x00 };
 // G923 Xbox→PC mode switch payload (usb_modeswitch MessageContent="0f00010142")
 static uint8_t g923_mode_switch[] = { 0x0F, 0x00, 0x01, 0x01, 0x42 };
 
+// In xbox.cc — at the top, near the other includes
+// Forward declaration — defined in remapper_single.cc
+extern void g923_schedule_port_reset(uint8_t hub_addr, uint8_t hub_port, uint32_t delay_ms);
+
 enum class XType : int8_t {
     UNKNOWN = 0,
     XBOX_360 = 1,
@@ -218,7 +222,7 @@ bool xboxh_open(uint8_t rhport, uint8_t dev_addr, tusb_desc_interface_t const* d
     // switch to PC mode (0xC26E) before it can be used as HID.
     uint16_t vid, pid;
     tuh_vid_pid_get(dev_addr, &vid, &pid);
-    if (vid == G923_VENDOR_ID && pid == G923_PID_XBOX_PRE &&
+    if (vid == G923_VENDOR_ID && pid == G923_PID_XBOXVAR_XBOXMODE &&
         desc_itf->bInterfaceClass == 255 &&
         desc_itf->bInterfaceNumber == 0 &&
         desc_itf->bNumEndpoints >= 2) {
@@ -393,24 +397,28 @@ bool xboxh_xfer_cb(uint8_t dev_addr, uint8_t ep_addr, xfer_result_t result, uint
     switch (xdev->type) {
         case XType::G923_PRE:
             if (ep_addr == xdev->out_ep) {
-#if CFG_TUD_CDC
-                if (result != XFER_RESULT_SUCCESS) {
-                    printf("G923: Xbox->PC mode switch interrupt OUT failed (result=%d) — device may not re-enumerate correctly\n", result);
-                } else {
-                    printf("G923: Xbox->PC mode switch interrupt OUT success - waiting for re-enumeration\n");
-                }
-#endif
                 uint8_t dev = xdev->dev_addr;
                 uint8_t itf = xdev->itf_num;
+                uint8_t hub_addr = 0, hub_port = 0;
+                tuh_get_hub_addr_port(dev, &hub_addr, &hub_port);
 
-                // Tell TinyUSB enumeration is done for this interface.
-                // Without this, the host stack stalls and can't enumerate
-                // the re-connected device.                
-                // Mode switch sent, device will re-enumerate. Nothing more to do.
-                xboxh_close(dev);                           // clean up first
-                usbh_driver_set_config_complete(dev, itf);  // then release enumeration
-            }
-            break;
+#if CFG_TUD_CDC
+                printf("G923: mode switch sent (result=%d), hub=%d port=%d\n",
+                    result, hub_addr, hub_port);
+#endif
+                xboxh_close(dev);
+                usbh_driver_set_config_complete(dev, itf);
+
+                if (hub_addr != 0) {
+                    g923_schedule_port_reset(hub_addr, hub_port, 2500);
+#if CFG_TUD_CDC
+                    printf("G923: port reset scheduled in 2500ms\n");
+                } else {
+                    printf("G923: no hub detected - direct connect, skipping port reset\n");
+#endif
+                }
+    }
+    break;
         case XType::XBOX_ONE:
             if (ep_addr == xdev->in_ep) {
                 if (xferred_bytes > 0) {

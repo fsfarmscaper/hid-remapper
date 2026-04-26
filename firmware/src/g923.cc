@@ -48,7 +48,7 @@ static uint8_t g923_led_last_level = -1;
 
 // Composite interface handle for queue_out_report()
 static uint16_t g923_iface() {
-    return (uint16_t)(g923_dev_addr << 8) | g923_instance;
+    return (uint16_t)(g923_hidpp_dev_addr << 8) | g923_hidpp_instance;
 }
 
 // ============================================================
@@ -96,6 +96,96 @@ static bool hidpp_send_vlong(uint8_t feat_idx, uint8_t func_id, const uint8_t* p
 }
 
 // ============================================================
+// HID++ interface identification via report descriptor
+// ============================================================
+
+uint8_t g923_hidpp_dev_addr = 0;
+uint8_t g923_hidpp_instance = 0;
+uint8_t g923_hidpp_itf_num  = 0;
+
+// Returns the byte size of a short HID descriptor item (tag byte + data).
+// Size field bits [1:0]: 0=0bytes, 1=1byte, 2=2bytes, 3=4bytes.
+static uint8_t hid_item_size(uint8_t tag_byte) {
+    uint8_t sz = tag_byte & 0x03;
+    return (sz == 3) ? 5 : (1 + sz);
+}
+
+// Reads the unsigned value from a short HID item's data bytes (little-endian).
+static uint32_t hid_item_value(const uint8_t* p, uint8_t tag_byte) {
+    switch (tag_byte & 0x03) {
+        case 1: return p[1];
+        case 2: return (uint32_t)(p[1] | ((uint32_t)p[2] << 8));
+        case 3: return (uint32_t)(p[1] | ((uint32_t)p[2] << 8) |
+                                  ((uint32_t)p[3] << 16) | ((uint32_t)p[4] << 24));
+        default: return 0;
+    }
+}
+
+// Walk the descriptor and extract the top-level Usage Page and first Usage
+// (before the first Collection). Returns true if they match the HID++ write
+// channel (0xFF43 / 0x0602 — Col02 confirmed from Python hidapi capture).
+static bool descriptor_is_hidpp(const uint8_t* desc, uint16_t len) {
+    uint32_t usage_page = 0;
+    uint32_t usage      = 0;
+    bool     got_up     = false;
+    bool     got_usage  = false;
+
+    for (uint16_t i = 0; i < len; ) {
+        if (i + 1 > len) break;  // bounds: need at least tag byte
+        uint8_t tag_byte  = desc[i];
+        uint8_t item_sz   = hid_item_size(tag_byte);
+        uint8_t item_tag  = tag_byte & 0xFC;
+
+        if (i + item_sz > len) break;  // truncated item — stop safely
+
+        switch (item_tag) {
+            case 0x04:  // Usage Page (global)
+                usage_page = hid_item_value(desc + i, tag_byte);
+                got_up = true;
+                break;
+            case 0x08:  // Usage (local) — 1-byte form (≤0xFF)
+            case 0x0A:  // Usage (local) — 2-byte or 4-byte extended form (>0xFF)
+                if (!got_usage) {
+                    usage     = hid_item_value(desc + i, tag_byte);
+                    got_usage = true;
+                }
+                break;
+            case 0xA0:  // Collection — top-level items are done
+                goto done;
+        }
+        i += item_sz;
+    }
+done:
+
+#if CFG_TUD_CDC
+    printf("G923 descriptor scan: UsagePage=0x%04lX Usage=0x%04lX\n",
+           (unsigned long)usage_page, (unsigned long)usage);
+#endif
+
+    return (got_up && got_usage &&
+            usage_page == G923_HIDPP_USAGE_PAGE &&
+            usage      == G923_HIDPP_USAGE_WRITE);
+}
+
+bool g923_check_hidpp_interface(uint8_t dev_addr, uint8_t instance,
+                                uint8_t itf_num,
+                                const uint8_t* desc_report, uint16_t desc_len) {
+    if (desc_report == nullptr || desc_len == 0) return false;
+    if (!descriptor_is_hidpp(desc_report, desc_len)) return false;
+
+    g923_hidpp_dev_addr = dev_addr;
+    g923_hidpp_instance = instance;
+    g923_hidpp_itf_num  = itf_num;
+
+#if CFG_TUD_CDC
+    printf("G923 HID++ interface found: dev=%d inst=%d itf=%d\n",
+           dev_addr, instance, itf_num);
+#endif
+    return true;
+}
+
+
+// ============================================================
 // Xbox mode switch (0xC26D → 0xC26E)
 // ============================================================
 // NOTE: The mode switch is handled by the Xbox driver in xbox.cc (XType::G923_PRE).
@@ -103,39 +193,50 @@ static bool hidpp_send_vlong(uint8_t feat_idx, uint8_t func_id, const uint8_t* p
 // driver ignores, so tuh_hid_mount_cb never fires for it. The Xbox driver detects
 // it by VID/PID and sends the 5-byte mode switch on the interrupt OUT endpoint.
 // After re-enumeration as 0xC26E, the HID driver mounts it and g923_on_mount()
-// is called with G923_PID_XBOX.
+// is called with G923_PID_XBOXVAR_PCMODE.
 
 // ============================================================
 // Device lifecycle
 // ============================================================
 
-void g923_on_mount(uint8_t dev_addr, uint8_t instance, uint16_t vid, uint16_t pid) {
+void g923_on_mount(uint8_t dev_addr, uint8_t instance, uint16_t vid, uint16_t pid,
+                   uint8_t itf_num,
+                   const uint8_t* desc_report, uint16_t desc_len) {
 #if CFG_TUD_CDC
-    printf("g923_on_mount (addr=%d, inst=%d, vid=%d, pid=%d)\n", dev_addr, instance, vid, pid);
+    printf("g923_on_mount (addr=%d, inst=%d, vid=0x%04X, pid=0x%04X, itf=%d)\n",
+           dev_addr, instance, vid, pid, itf_num);
 #endif
     if (vid != G923_VENDOR_ID) return;
 
-    if (pid == G923_PID_XBOX) {
+    if (pid == G923_PID_XBOXVAR_PCMODE) {
         g923_dev_addr = dev_addr;
-        g923_instance = instance;
-        g923_xbox = true;
+        g923_xbox     = true;
         g923_led_feat_idx = 0;
-        g923_led_enabled = false;
+        g923_led_enabled  = false;
+
+        // Identify which instance is the HID++ write channel (Col02)
+        // by scanning the report descriptor for Usage Page 0xFF43, Usage 0x0602.
+        // g923_apply_defaults() is only called on that instance — not the
+        // gamepad interface — so HID++ init doesn't fire on the wrong endpoint.
+        bool is_hidpp = g923_check_hidpp_interface(dev_addr, instance,
+                                                    itf_num, desc_report, desc_len);
 #if CFG_TUD_CDC
-        printf("G923 Xbox/PC mounted (addr=%d, inst=%d)\n", dev_addr, instance);
+        printf("G923 Xbox/PC mounted (addr=%d, inst=%d, itf=%d, is_hidpp=%d)\n",
+               dev_addr, instance, itf_num, is_hidpp);
 #endif
-        g923_apply_defaults();
-    } else if (pid == G923_PID_XBOX_PRE) {
-        // Device is in Xbox mode — mode switch is handled by xbox.cc (XType::G923_PRE).
-        // It will re-enumerate as 0xC26E and this function will be called again
-        // with G923_PID_XBOX. Nothing to do here.
+        if (is_hidpp) {
+            g923_apply_defaults();
+        }
+
+    } else if (pid == G923_PID_XBOXVAR_XBOXMODE) {
+        // Pre-switch Xbox mode — handled by xbox.cc, should not reach here.
 #if CFG_TUD_CDC
-        printf("G923 Xbox mode (0xC26D) seen in HID mount — unexpected, mode switch should be via xbox.cc\n");
+        printf("G923 Xbox mode (0xC26D) in HID mount — unexpected\n");
 #endif
-    } else if (pid == G923_PID_PS) {
+    } else if (pid == G923_PID_PSVAR) {
         g923_dev_addr = dev_addr;
         g923_instance = instance;
-        g923_xbox = false;
+        g923_xbox     = false;
 #if CFG_TUD_CDC
         printf("G923 PS/PC mounted (addr=%d, inst=%d)\n", dev_addr, instance);
 #endif
@@ -144,9 +245,13 @@ void g923_on_mount(uint8_t dev_addr, uint8_t instance, uint16_t vid, uint16_t pi
 
 void g923_on_unmount(uint8_t dev_addr) {
     if (dev_addr == g923_dev_addr) {
-        g923_dev_addr = 0;
-        g923_led_feat_idx = 0;
-        g923_led_enabled = false;
+        g923_dev_addr       = 0;
+        g923_led_feat_idx   = 0;
+        g923_led_enabled    = false;
+        // Clear HID++ interface tracking
+        g923_hidpp_dev_addr = 0;
+        g923_hidpp_instance = 0;
+        g923_hidpp_itf_num  = 0;
 #if CFG_TUD_CDC
         printf("G923 unmounted\n");
 #endif
