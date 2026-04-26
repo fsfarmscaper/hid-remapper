@@ -120,6 +120,8 @@ void do_send_out_report() {
 #if CFG_TUD_CDC
             printf("send_report(addr=%d,inst=%d,rid=%d,len=%d): %s\n",
                 out->dev_addr, out->interface, out->report_id, out->len, ok ? "OK" : "FAIL");
+            printf("send_report: r[0]=0x%02X, r[1]=0x%02X r[2]=0x%02X r[3]=0x%02X r[4]=0x%02X r[5]=0x%02X\n",
+                report[0], report[1], report[2], report[3], report[4], report[5]);
 #endif
             if (ok) {
                 ready_to_send = false;
