@@ -47,7 +47,7 @@ void do_queue_out_report(const uint8_t* report, uint16_t len, uint8_t report_id,
     }
     outgoing_out_reports[oor_tail].dev_addr = dev_addr;
     outgoing_out_reports[oor_tail].interface = interface;
-    outgoing_out_reports[oor_tail].report_id = report_id;
+    outgoing_out_reports[oor_tail].report_id = (type == OutType::LONG || type == OutType::VLONG) ? 0 : report_id;    
     outgoing_out_reports[oor_tail].len = len + ((report_id != 0) ? 1 : 0);
     outgoing_out_reports[oor_tail].type = type;
     if (report_id != 0) {
@@ -136,7 +136,7 @@ void do_send_out_report() {
 
 void tuh_hid_set_report_complete_cb(uint8_t dev_addr, uint8_t instance, uint8_t report_id, uint8_t report_type, uint16_t len) {
 #if CFG_TUD_CDC
-    printf("tuh_hid_set_report_complete_cb(addr=%d,inst=%d,rid=%d,rtype=%d, len=%d): %s\n",
+    printf("tuh_hid_set_report_complete_cb(addr=%d,inst=%d,rid=%d,rtype=%d, len=%d)\n",
                    dev_addr, instance, report_id, report_type, len);
 #endif
     ready_to_send = true;

@@ -111,7 +111,7 @@ void read_report(bool* new_report, bool* tick) {
         printf("G923: hub port reset (hub=%d port=%d)\n",
                g923_reset_hub_addr, g923_reset_hub_port);
 #endif
-        tuh_hub_port_reset(g923_reset_hub_addr, g923_reset_hub_port, NULL);
+        hub_port_reset(g923_reset_hub_addr, g923_reset_hub_port, NULL, 0);
         g923_reset_hub_addr = 0;
         g923_reset_hub_port = 0;
     }    

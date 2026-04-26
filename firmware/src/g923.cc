@@ -271,6 +271,7 @@ void g923_on_unmount(uint8_t dev_addr) {
         g923_hidpp_dev_addr = 0;
         g923_hidpp_instance = 0;
         g923_hidpp_itf_num  = 0;
+        g923_init_state = G923_INIT_IDLE;        
 #if CFG_TUD_CDC
         printf("G923 unmounted\n");
 #endif
@@ -480,15 +481,9 @@ void g923_on_hidpp_response(const uint8_t* report, uint16_t len) {
     // report[2] = func|sw_id echo  (func in upper nibble, sw_id in lower)
     // report[3+] = response params
 
-#if CFG_TUD_CDC
-    printf("g923_on_hidpp_response: state=%d feat=0x%02X func=0x%02X p[3]=0x%02X\n",
-           g923_init_state, report[1], report[2], report[3]);
-#endif
-
-    // MOUNTED state: any first IN triggers IRoot — don't check report content
     if (g923_init_state == G923_INIT_MOUNTED) {
 #if CFG_TUD_CDC
-        printf("g923: first IN received, starting IRoot discovery\n");
+        printf("g923: first IN received (len=%d), starting IRoot discovery\n", len);
 #endif
         g923_init_state = G923_INIT_WAIT_IROOT;
         g923_discover_led_feature();
@@ -497,6 +492,12 @@ void g923_on_hidpp_response(const uint8_t* report, uint16_t len) {
 
     // All other states: must be a valid HID++ response
     if (len < 4 || report[0] != HIDPP_DEVICE_INDEX) return;
+
+#if CFG_TUD_CDC
+    // Safe to read [1],[2],[3] now — len >= 4 guaranteed above
+    printf("g923_on_hidpp_response: state=%d feat=0x%02X func=0x%02X p[3]=0x%02X\n",
+           g923_init_state, report[1], report[2], report[3]);
+#endif
 
     switch (g923_init_state) {
 
