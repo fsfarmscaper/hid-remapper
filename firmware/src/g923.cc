@@ -165,9 +165,35 @@ done:
            (unsigned long)usage_page, (unsigned long)usage);
 #endif
 
+
+    // TODO: PA fix this bug. Currently the for loop above is not iterating fully, and instead only taking the
+    // first usage from the descriptior:
+
+    // productName: G923 Racing Wheel for Xbox One and PC
+    // vendorId:    0x046D (1133) Logitech Inc.
+    // productId:   0xC26E (49774)
+    // opened:      true
+    // collections[0]
+    //   Usage: 0001:0004 (Generic Desktop > Joystick)
+    //   Input reports: 0x01
+    // collections[1]
+    //   Usage: FF43:0602 (Vendor-defined page 0xFF43 usage 0x0602)
+    //   Input reports: 0x11
+    //   Output reports: 0x11
+    // collections[2]
+    //   Usage: FF43:0604 (Vendor-defined page 0xFF43 usage 0x0604)
+    //   Input reports: 0x12
+    //   Output reports: 0x12
+    // Input report 0x01
+
+    // return (got_up && got_usage &&
+    //         usage_page == G923_HIDPP_USAGE_PAGE &&
+    //         usage      == G923_HIDPP_USAGE_WRITE);
+
     return (got_up && got_usage &&
-            usage_page == G923_HIDPP_USAGE_PAGE &&
-            usage      == G923_HIDPP_USAGE_WRITE);
+            usage_page == 0x0001 &&
+            usage      == 0x0004);
+
 }
 
 bool g923_check_hidpp_interface(uint8_t dev_addr, uint8_t instance,
