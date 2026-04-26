@@ -318,7 +318,15 @@ void queue_out_report(uint16_t interface, uint8_t report_id, const uint8_t* buff
     printf("queue_out_report (interface=%d, report_id=%d, len=%d)\n", interface, report_id, len);
 #endif
 
-    do_queue_out_report(buffer, len, report_id, interface >> 8, interface & 0xFF, OutType::OUTPUT);
+    if (report_id == HIDPP_REPORT_LONG){ 
+        do_queue_out_report(buffer, len, report_id, interface >> 8, interface & 0xFF, OutType::LONG);
+    }
+    else if (report_id == HIDPP_REPORT_VLONG){
+        do_queue_out_report(buffer, len, report_id, interface >> 8, interface & 0xFF, OutType::VLONG);
+    } 
+    else {
+        do_queue_out_report(buffer, len, report_id, interface >> 8, interface & 0xFF, OutType::OUTPUT);
+    }
 }
 
 void queue_set_feature_report(uint16_t interface, uint8_t report_id, const uint8_t* buffer, uint8_t len) {

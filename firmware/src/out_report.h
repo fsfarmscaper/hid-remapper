@@ -7,6 +7,8 @@ enum class OutType : int8_t {
     OUTPUT = 0,
     GET_FEATURE = 1,
     SET_FEATURE = 2,
+    LONG = 3,
+    VLONG = 4,
 };
 
 void do_queue_out_report(const uint8_t* report, uint16_t len, uint8_t report_id, uint8_t dev_addr, uint8_t interface, OutType type);

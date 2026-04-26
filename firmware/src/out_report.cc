@@ -115,13 +115,28 @@ void do_send_out_report() {
                 oor_head = (oor_head + 1) % OOR_BUFSIZE;
                 oor_items--;
             }
+        } else if (out->type == OutType::LONG | out->type == OutType::VLONG) {
+            bool ok = tuh_hid_send_report(out->dev_addr, out->interface, out->report_id, out->report, out->len);
+#if CFG_TUD_CDC
+            printf("send_report(addr=%d,inst=%d,rid=%d,len=%d): %s\n",
+                out->dev_addr, out->interface, out->report_id, out->len, ok ? "OK" : "FAIL");
+#endif
+            if (ok) {
+                ready_to_send = false;
+                last_send_time = make_timeout_time_ms(SEND_TIMEOUT_MS);
+                oor_head = (oor_head + 1) % OOR_BUFSIZE;
+                oor_items--;
+            } else {
+                retry_pending = true;
+                retry_after_time = make_timeout_time_ms(RETRY_DELAY_MS);
+            }
         }
     }
 }
 
 void tuh_hid_set_report_complete_cb(uint8_t dev_addr, uint8_t instance, uint8_t report_id, uint8_t report_type, uint16_t len) {
 #if CFG_TUD_CDC
-    printf("set_report_complete_cb(addr=%d,inst=%d,rid=%d,rtype=%d, len=%d): %s\n",
+    printf("tuh_hid_set_report_complete_cb(addr=%d,inst=%d,rid=%d,rtype=%d, len=%d): %s\n",
                    dev_addr, instance, report_id, report_type, len);
 #endif
     ready_to_send = true;
@@ -131,4 +146,9 @@ void tuh_hid_set_report_complete_cb(uint8_t dev_addr, uint8_t instance, uint8_t 
 void tuh_hid_get_report_complete_cb(uint8_t dev_addr, uint8_t idx, uint8_t report_id, uint8_t report_type, uint16_t len) {
     ready_to_send = true;
     get_report_cb(dev_addr, idx, report_id, report_type, get_buffer, len);
+}
+
+void tuh_hid_report_sent_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* report, uint16_t len) {
+    ready_to_send = true;
+    // Optionally notify your app layer here too
 }
