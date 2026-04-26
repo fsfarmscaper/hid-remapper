@@ -155,6 +155,7 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* desc_re
         x52_set_g923_connected(true);
 #if CFG_TUD_CDC
         printf("Logitech G923 in PC Mode detected (addr=%d, vid=%d, pid=%d)\n", dev_addr, vid, pid);
+        printf("Logitech G923 in PC Mode detected (addr=%d, inst=%d, itf_num=%d)\n", ht_dev_addr, ht_instance, itf_num);
 #endif
     }
 

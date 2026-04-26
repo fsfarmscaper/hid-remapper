@@ -354,10 +354,6 @@ bool xboxh_set_config(uint8_t dev_addr, uint8_t itf_num) {
             printf("G923: sending Xbox->PC mode switch via OUT ep 0x%02x\n", xdev->out_ep);
 #endif
             xxfer_out(xdev, g923_mode_switch, sizeof(g923_mode_switch));
-
-            // TODO: PA this should likely be a close call instead to disconnect immediately
-            xboxh_close(dev_addr);
-            //usbh_driver_set_config_complete(dev_addr, itf_num);
             break;
         case XType::XBOX_ONE:
             xdev->setup_stage = 1;
@@ -395,7 +391,20 @@ bool xboxh_xfer_cb(uint8_t dev_addr, uint8_t ep_addr, xfer_result_t result, uint
 
     switch (xdev->type) {
         case XType::G923_PRE:
-            // Mode switch sent, device will re-enumerate. Nothing more to do.
+            if (ep_addr == xdev->out_ep) {
+#if CFG_TUD_CDC
+                printf("G923: mode switch sent, waiting for re-enumeration\n");
+#endif                
+                uint8_t dev = xdev->dev_addr;
+                uint8_t itf = xdev->itf_num;
+
+                // Tell TinyUSB enumeration is done for this interface.
+                // Without this, the host stack stalls and can't enumerate
+                // the re-connected device.                
+                // Mode switch sent, device will re-enumerate. Nothing more to do.
+                xboxh_close(dev);                           // clean up first
+                usbh_driver_set_config_complete(dev, itf);  // then release enumeration
+            }
             break;
         case XType::XBOX_ONE:
             if (ep_addr == xdev->in_ep) {

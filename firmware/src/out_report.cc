@@ -120,6 +120,10 @@ void do_send_out_report() {
 }
 
 void tuh_hid_set_report_complete_cb(uint8_t dev_addr, uint8_t instance, uint8_t report_id, uint8_t report_type, uint16_t len) {
+#if CFG_TUD_CDC
+    printf("set_report_complete_cb(addr=%d,inst=%d,rid=%d,rtype=%d, len=%d): %s\n",
+                   dev_addr, instance, report_id, report_type, len);
+#endif
     ready_to_send = true;
     set_report_complete_cb(dev_addr, instance, report_id);
 }
