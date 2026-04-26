@@ -505,7 +505,10 @@ void g923_on_hidpp_response(const uint8_t* report, uint16_t len) {
         case G923_INIT_WAIT_IROOT:
             // IRoot response: report[3] = runtime feature index for queried page
             // Confirmed from Python script: runtime index for 0x807A = 0x12
-            g923_led_feat_idx = report[4];
+
+            // TODO: PA use returned index
+            //g923_led_feat_idx = report[4];
+            g923_led_feat_idx = 0x12;
 #if CFG_TUD_CDC
             printf("g923: IRoot response — LED feat_idx=0x%02X\n", g923_led_feat_idx);
 #endif
