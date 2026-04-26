@@ -491,12 +491,13 @@ void g923_on_hidpp_response(const uint8_t* report, uint16_t len) {
     }
 
     // All other states: must be a valid HID++ response
-    if (len < 4 || report[0] != HIDPP_DEVICE_INDEX) return;
+    //if (len < 4 || report[0] != HIDPP_DEVICE_INDEX) return;
+    if (len < 6 ) return;
 
 #if CFG_TUD_CDC
     // Safe to read [1],[2],[3] now — len >= 4 guaranteed above
-    printf("g923_on_hidpp_response: state=%d feat=0x%02X func=0x%02X p[3]=0x%02X\n",
-           g923_init_state, report[1], report[2], report[3]);
+    printf("g923_on_hidpp_response: state=%d, idx=0x%02X feat=0x%02X func=0x%02X p[3]=0x%02X p[4]=0x%02X p[5]=0x%02X\n",
+           g923_init_state, report[0], report[1], report[2], report[3], report[4], report[5]);
 #endif
 
     switch (g923_init_state) {
