@@ -149,6 +149,10 @@ void tuh_hid_get_report_complete_cb(uint8_t dev_addr, uint8_t idx, uint8_t repor
 }
 
 void tuh_hid_report_sent_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* report, uint16_t len) {
+#if CFG_TUD_CDC
+    printf("tuh_hid_report_sent_cb(addr=%d,inst=%d,rid=%d,rtype=%d, len=%d): %s\n",
+                   dev_addr, instance, report_id, report_type, len);
+#endif
     ready_to_send = true;
     // Optionally notify your app layer here too
 }
