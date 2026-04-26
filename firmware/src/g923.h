@@ -96,10 +96,11 @@ bool g923_check_hidpp_interface(uint8_t dev_addr, uint8_t instance,
 
 typedef enum {
     G923_INIT_IDLE            = 0,
-    G923_INIT_WAIT_IROOT      = 1,  // sent IRoot query, awaiting feature index response
-    G923_INIT_WAIT_LED_ENABLE = 2,  // sent func3 enable, awaiting ack
-    G923_INIT_WAIT_LED_SET    = 3,  // sent func6 set, awaiting ack
-    G923_INIT_DONE            = 4,
+    G923_INIT_MOUNTED         = 1,  // mounted, waiting for first IN to confirm receive armed    
+    G923_INIT_WAIT_IROOT      = 2,  // sent IRoot query, awaiting feature index response
+    G923_INIT_WAIT_LED_ENABLE = 3,  // sent func3 enable, awaiting ack
+    G923_INIT_WAIT_LED_SET    = 4,  // sent func6 set, awaiting ack
+    G923_INIT_DONE            = 5,
 } g923_init_state_t;
 
 // Called from tuh_hid_report_received_cb for HID++ responses on the HID++ instance.

@@ -17,5 +17,6 @@ void do_send_out_report();
 
 void get_report_cb(uint8_t dev_addr, uint8_t interface, uint8_t report_id, uint8_t report_type, uint8_t* report, uint16_t len);
 void set_report_complete_cb(uint8_t dev_addr, uint8_t interface, uint8_t report_id);
+void report_sent_cb(uint8_t dev_addr, uint8_t interface);
 
 #endif

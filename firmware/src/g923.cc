@@ -128,72 +128,62 @@ static uint32_t hid_item_value(const uint8_t* p, uint8_t tag_byte) {
 // (before the first Collection). Returns true if they match the HID++ write
 // channel (0xFF43 / 0x0602 — Col02 confirmed from Python hidapi capture).
 static bool descriptor_is_hidpp(const uint8_t* desc, uint16_t len) {
-    uint32_t usage_page = 0;
-    uint32_t usage      = 0;
-    bool     got_up     = false;
-    bool     got_usage  = false;
+    uint32_t usage_page   = 0;
+    uint32_t usage        = 0;
+    bool     got_up       = false;
+    bool     got_usage    = false;
+    int      depth        = 0;  // collection nesting depth
 
     for (uint16_t i = 0; i < len; ) {
-        if (i + 1 > len) break;  // bounds: need at least tag byte
-        uint8_t tag_byte  = desc[i];
-        uint8_t item_sz   = hid_item_size(tag_byte);
-        uint8_t item_tag  = tag_byte & 0xFC;
+        if (i + 1 > len) break;
+        uint8_t tag_byte = desc[i];
+        uint8_t item_sz  = hid_item_size(tag_byte);
+        uint8_t item_tag = tag_byte & 0xFC;
 
-        if (i + item_sz > len) break;  // truncated item — stop safely
+        if (i + item_sz > len) break;
 
         switch (item_tag) {
-            case 0x04:  // Usage Page (global)
-                usage_page = hid_item_value(desc + i, tag_byte);
-                got_up = true;
+            case 0x04:  // Usage Page (global) — applies until next Usage Page
+                if (depth == 0) {
+                    usage_page = hid_item_value(desc + i, tag_byte);
+                    got_up     = true;
+                    got_usage  = false;  // reset — Usage Page resets pending Usage
+                    usage      = 0;
+                }
                 break;
-            case 0x08:  // Usage (local) — 1-byte form (≤0xFF)
-            case 0x0A:  // Usage (local) — 2-byte or 4-byte extended form (>0xFF)
-                if (!got_usage) {
+
+            case 0x08:  // Usage (local, 1-byte)
+            case 0x0A:  // Usage (local, extended)
+                if (depth == 0 && !got_usage) {
                     usage     = hid_item_value(desc + i, tag_byte);
                     got_usage = true;
                 }
                 break;
-            case 0xA0:  // Collection — top-level items are done
-                goto done;
+
+            case 0xA0:  // Collection — check the pending usage before descending
+                if (depth == 0 && got_up && got_usage) {
+#if CFG_TUD_CDC
+                    printf("G923 descriptor collection: UsagePage=0x%04lX Usage=0x%04lX\n",
+                           (unsigned long)usage_page, (unsigned long)usage);
+#endif
+                    if (usage_page == G923_HIDPP_USAGE_PAGE &&
+                        usage      == G923_HIDPP_USAGE_WRITE) {
+                        return true;  // found FF43:0602 — this is the HID++ write channel
+                    }
+                    // Reset for next top-level collection
+                    got_usage = false;
+                    usage     = 0;
+                }
+                depth++;
+                break;
+
+            case 0xC0:  // End Collection
+                if (depth > 0) depth--;
+                break;
         }
         i += item_sz;
     }
-done:
-
-#if CFG_TUD_CDC
-    printf("G923 descriptor scan: UsagePage=0x%04lX Usage=0x%04lX\n",
-           (unsigned long)usage_page, (unsigned long)usage);
-#endif
-
-
-    // TODO: PA fix this bug. Currently the for loop above is not iterating fully, and instead only taking the
-    // first usage from the descriptior:
-
-    // productName: G923 Racing Wheel for Xbox One and PC
-    // vendorId:    0x046D (1133) Logitech Inc.
-    // productId:   0xC26E (49774)
-    // opened:      true
-    // collections[0]
-    //   Usage: 0001:0004 (Generic Desktop > Joystick)
-    //   Input reports: 0x01
-    // collections[1]
-    //   Usage: FF43:0602 (Vendor-defined page 0xFF43 usage 0x0602)
-    //   Input reports: 0x11
-    //   Output reports: 0x11
-    // collections[2]
-    //   Usage: FF43:0604 (Vendor-defined page 0xFF43 usage 0x0604)
-    //   Input reports: 0x12
-    //   Output reports: 0x12
-    // Input report 0x01
-
-    // return (got_up && got_usage &&
-    //         usage_page == G923_HIDPP_USAGE_PAGE &&
-    //         usage      == G923_HIDPP_USAGE_WRITE);
-
-    return (got_up && got_usage &&
-            usage_page == 0x0001 &&
-            usage      == 0x0004);
-
+    return false;
 }
 
 bool g923_check_hidpp_interface(uint8_t dev_addr, uint8_t instance,
@@ -483,7 +473,6 @@ bool g923_set_leds(uint8_t level) {
 // ============================================================
 
 void g923_on_hidpp_response(const uint8_t* report, uint16_t len) {
-    if (len < 4) return;
 
     // After TinyUSB strips report ID:
     // report[0] = device_index (0xFF)
@@ -495,6 +484,19 @@ void g923_on_hidpp_response(const uint8_t* report, uint16_t len) {
     printf("g923_on_hidpp_response: state=%d feat=0x%02X func=0x%02X p[3]=0x%02X\n",
            g923_init_state, report[1], report[2], report[3]);
 #endif
+
+    // MOUNTED state: any first IN triggers IRoot — don't check report content
+    if (g923_init_state == G923_INIT_MOUNTED) {
+#if CFG_TUD_CDC
+        printf("g923: first IN received, starting IRoot discovery\n");
+#endif
+        g923_init_state = G923_INIT_WAIT_IROOT;
+        g923_discover_led_feature();
+        return;
+    }
+
+    // All other states: must be a valid HID++ response
+    if (len < 4 || report[0] != HIDPP_DEVICE_INDEX) return;
 
     switch (g923_init_state) {
 
@@ -553,13 +555,11 @@ void g923_on_hidpp_response(const uint8_t* report, uint16_t len) {
 // Full LED init — discover feature + enable
 void g923_init_leds(void) {
 #if CFG_TUD_CDC
-    printf("g923_init_leds: starting IRoot discovery\n");
+    printf("g923_init_leds: waiting for first IN report\n");
 #endif
     if (!g923_dev_addr || !g923_xbox) return;
-    g923_init_state = G923_INIT_WAIT_IROOT;
-    g923_discover_led_feature();
-    // g923_enable_leds() and g923_set_leds() are called from
-    // g923_on_hidpp_response() as each ack arrives
+    g923_init_state = G923_INIT_MOUNTED;  // was G923_INIT_WAIT_IROOT
+    // Do NOT send IRoot query here — wait for first IN in g923_on_hidpp_response
 }
 
 // Simulate RPM from pedal inputs (call from report callback)

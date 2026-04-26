@@ -4,6 +4,7 @@
 #include "usb_midi_host.h"
 #include "pico/platform.h"
 #include "pico/time.h"
+#include "host/hub.h"
 
 #include "cdc_debug.h"
 #include "descriptor_parser.h"
@@ -110,8 +111,7 @@ void read_report(bool* new_report, bool* tick) {
         printf("G923: hub port reset (hub=%d port=%d)\n",
                g923_reset_hub_addr, g923_reset_hub_port);
 #endif
-        // TODO: PA error: 'tuh_hub_port_reset' was not declared in this scope
-        //tuh_hub_port_reset(g923_reset_hub_addr, g923_reset_hub_port, NULL);
+        tuh_hub_port_reset(g923_reset_hub_addr, g923_reset_hub_port, NULL);
         g923_reset_hub_addr = 0;
         g923_reset_hub_port = 0;
     }    
@@ -290,11 +290,9 @@ void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t cons
     // G923 HID++ response routing
     // All 0x11 requests return 0x12 VLong responses (confirmed from Python capture).
     // TinyUSB strips report ID before callback so report[0] = device_index (0xFF).
-    // Filter by stored HID++ instance to avoid routing gamepad reports here.
+    // remapper_single.cc — simplified, no HIDPP_DEVICE_INDEX filter here
     if (dev_addr == g923_hidpp_dev_addr &&
-        instance == g923_hidpp_instance &&
-        len >= 4 &&
-        report[0] == HIDPP_DEVICE_INDEX) {
+        instance == g923_hidpp_instance) {
         g923_on_hidpp_response(report, len);
     }
 
@@ -358,4 +356,9 @@ void get_report_cb(uint8_t dev_addr, uint8_t interface, uint8_t report_id, uint8
 
 void set_report_complete_cb(uint8_t dev_addr, uint8_t interface, uint8_t report_id) {
     handle_set_report_complete((uint16_t) (dev_addr << 8) | interface, report_id);
+}
+
+void report_sent_cb(uint8_t dev_addr, uint8_t interface) {
+    // Currently nothing needs notifying on interrupt OUT completion.
+    // Add per-device handling here when per-device queues are implemented (Phase 5).
 }

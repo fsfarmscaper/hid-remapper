@@ -115,7 +115,7 @@ void do_send_out_report() {
                 oor_head = (oor_head + 1) % OOR_BUFSIZE;
                 oor_items--;
             }
-        } else if (out->type == OutType::LONG | out->type == OutType::VLONG) {
+        } else if (out->type == OutType::LONG || out->type == OutType::VLONG) {
             bool ok = tuh_hid_send_report(out->dev_addr, out->interface, out->report_id, out->report, out->len);
 #if CFG_TUD_CDC
             printf("send_report(addr=%d,inst=%d,rid=%d,len=%d): %s\n",
@@ -148,11 +148,12 @@ void tuh_hid_get_report_complete_cb(uint8_t dev_addr, uint8_t idx, uint8_t repor
     get_report_cb(dev_addr, idx, report_id, report_type, get_buffer, len);
 }
 
-void tuh_hid_report_sent_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* report, uint16_t len) {
+void tuh_hid_report_sent_cb(uint8_t dev_addr, uint8_t instance,
+                              uint8_t const* report, uint16_t len) {
 #if CFG_TUD_CDC
-    printf("tuh_hid_report_sent_cb(addr=%d,inst=%d,rid=%d,len=%d): %s\n",
-                   dev_addr, instance, report, len);
+    printf("tuh_hid_report_sent_cb(addr=%d,inst=%d,len=%d)\n",
+           dev_addr, instance, len);
 #endif
     ready_to_send = true;
-    // Optionally notify your app layer here too
+    report_sent_cb(dev_addr, instance);
 }
