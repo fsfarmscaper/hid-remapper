@@ -21,6 +21,8 @@
 #define HIDPP_PAGE_AXIS_SENSITIVITY  0x80A3  // Per-axis sensitivity
 #define HIDPP_PAGE_AXIS_MODE         0x8120  // Axis response curve / profile
 #define HIDPP_PAGE_LED_CTRL          0x807A  // "Adjustable Configuration" — LED control
+#define HIDPP_PAGE_PEDAL_STATUS     0x8060  // Dual-clutch mode control
+#define HIDPP_PAGE_DEVICE_READY     0x8100  // Device Ready notification (fires after POST)
 
 // Confirmed runtime feature indices (from IFeatureSet enumeration)
 // These are fixed for the G923 Xbox firmware — no discovery needed
@@ -28,6 +30,9 @@
 #define G923_FIDX_AXIS_SENSITIVITY  0x14  // Feature 0x80A3
 #define G923_FIDX_AXIS_MODE         0x0A  // Feature 0x8120
 #define G923_FIDX_LED_CTRL          0x12  // Feature 0x807A
+#define G923_FIDX_DEVICE_READY      0x03    // TODO: confirm from CDC log
+#define G923_FIDX_PEDAL_STATUS      0x0D    // TODO: confirm from IRoot scan
+#define G923_PEDAL_FUNC_SET_MODE    1
 
 // Force Feedback functions (Feature 0x8123)
 #define G923_FFB_FUNC_SET_SPRING    2  // Set spring effect (Very Long)
@@ -79,6 +84,8 @@
 #define G923_HIDPP_USAGE_WRITE   0x0602   // Col02 — the interface to match and store
 #define G923_HIDPP_USAGE_READ    0x0604   // Col03 — informational, same iface/instance
 
+
+
 // Stored at mount time by g923_check_hidpp_interface()
 extern uint8_t g923_hidpp_dev_addr;
 extern uint8_t g923_hidpp_instance;
@@ -94,13 +101,15 @@ bool g923_check_hidpp_interface(uint8_t dev_addr, uint8_t instance,
 // HID++ init state machine (Phase 3)
 // ============================================================
 
+// Replace existing g923_init_state_t with:
 typedef enum {
-    G923_INIT_IDLE            = 0,
-    G923_INIT_MOUNTED         = 1,  // mounted, waiting for first IN to confirm receive armed    
-    G923_INIT_WAIT_IROOT      = 2,  // sent IRoot query, awaiting feature index response
-    G923_INIT_WAIT_LED_ENABLE = 3,  // sent func3 enable, awaiting ack
-    G923_INIT_WAIT_LED_SET    = 4,  // sent func6 set, awaiting ack
-    G923_INIT_DONE            = 5,
+    G923_INIT_IDLE              = 0,
+    G923_INIT_MOUNTED           = 1,  // mounted, waiting for first IN to arm receive path
+    G923_INIT_WAIT_READY        = 2,  // waiting for 0x8100 POST-complete notification
+    G923_INIT_WAIT_IROOT        = 3,  // sent IRoot query, awaiting feature index response
+    G923_INIT_WAIT_LED_ENABLE   = 4,  // sent func3 enable, awaiting ack
+    G923_INIT_WAIT_LED_SET      = 5,  // sent func6 set, awaiting ack
+    G923_INIT_DONE              = 6,
 } g923_init_state_t;
 
 // Called from tuh_hid_report_received_cb for HID++ responses on the HID++ instance.

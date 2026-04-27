@@ -150,6 +150,7 @@ static uint8_t g923_mode_switch[] = { 0x0F, 0x00, 0x01, 0x01, 0x42 };
 // In xbox.cc — at the top, near the other includes
 // Forward declaration — defined in remapper_single.cc
 extern void g923_schedule_port_reset(uint8_t hub_addr, uint8_t hub_port, uint32_t delay_ms);
+extern void g923_schedule_bus_reset(uint32_t delay_ms);
 
 enum class XType : int8_t {
     UNKNOWN = 0,
@@ -413,8 +414,11 @@ bool xboxh_xfer_cb(uint8_t dev_addr, uint8_t ep_addr, xfer_result_t result, uint
                     g923_schedule_port_reset(hub_addr, hub_port, 2500);
 #if CFG_TUD_CDC
                     printf("G923: port reset scheduled in 2500ms\n");
+#endif
                 } else {
-                    printf("G923: no hub detected - direct connect, skipping port reset\n");
+                    g923_schedule_bus_reset(2500);  // direct connect — reset root port
+#if CFG_TUD_CDC
+                    printf("G923: no hub detected - direct connect, reseting root port\n");
 #endif
                 }
     }

@@ -64,15 +64,22 @@ static repeating_timer_t sof_timer;
 // G923 deferred hub port reset state
 // Written from sof_callback (1ms timer), read from read_report (main loop)
 static volatile uint32_t g923_reset_countdown_ms = 0;
-static volatile bool     g923_do_port_reset       = false;
-static uint8_t           g923_reset_hub_addr       = 0;
-static uint8_t           g923_reset_hub_port       = 0;
+static volatile uint32_t g923_bus_reset_countdown_ms = 0;
+static volatile bool     g923_do_bus_reset       = false;
+static volatile bool     g923_do_port_reset      = false;
+static uint8_t           g923_reset_hub_addr     = 0;
+static uint8_t           g923_reset_hub_port     = 0;
 
 void g923_schedule_port_reset(uint8_t hub_addr, uint8_t hub_port, uint32_t delay_ms) {
     g923_reset_hub_addr      = hub_addr;
     g923_reset_hub_port      = hub_port;
     g923_reset_countdown_ms  = delay_ms;
     g923_do_port_reset       = false;
+}
+
+void g923_schedule_bus_reset(uint32_t delay_ms) {
+    g923_bus_reset_countdown_ms = delay_ms;
+    g923_do_bus_reset           = false;
 }
 
 
@@ -114,7 +121,16 @@ void read_report(bool* new_report, bool* tick) {
         hub_port_reset(g923_reset_hub_addr, g923_reset_hub_port, NULL, 0);
         g923_reset_hub_addr = 0;
         g923_reset_hub_port = 0;
-    }    
+    }
+    if (g923_do_bus_reset) {
+        g923_do_bus_reset = false;
+#if CFG_TUD_CDC
+        printf("G923: root port bus reset\n");
+#endif
+        tuh_rhport_reset_bus(BOARD_TUH_RHPORT, true);
+        busy_wait_ms(20);
+        tuh_rhport_reset_bus(BOARD_TUH_RHPORT, false);
+    }     
     
     // Service device mode (CDC for debug output)
     tud_task();
@@ -182,8 +198,8 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* desc_re
     if (vid == G923_VENDOR_ID && pid == G923_PID_XBOXVAR_PCMODE) {
         x52_set_g923_connected(true);
 #if CFG_TUD_CDC
-        printf("Logitech G923 in PC Mode detected (addr=%d, vid=%d, pid=%d)\n", dev_addr, vid, pid);
-        printf("Logitech G923 in PC Mode detected (addr=%d, inst=%d, itf_num=%d)\n", dev_addr, instance, itf_num);
+printf("Logitech G923 in PC Mode detected (addr=%d, inst=%d, itf=%d, vid=%d, pid=%d)\n",
+       dev_addr, instance, itf_num, vid, pid);
 #endif
     }
 
@@ -345,9 +361,10 @@ void send_out_report() {
 
 void __no_inline_not_in_flash_func(sof_callback)() {
     if (g923_reset_countdown_ms > 0) {
-        if (--g923_reset_countdown_ms == 0) {
-            g923_do_port_reset = true;
-        }
+        if (--g923_reset_countdown_ms == 0) g923_do_port_reset = true;
+    }
+    if (g923_bus_reset_countdown_ms > 0) {
+        if (--g923_bus_reset_countdown_ms == 0) g923_do_bus_reset = true;
     }
 }
 
