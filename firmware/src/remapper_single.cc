@@ -69,6 +69,8 @@ static volatile bool     g923_do_bus_reset       = false;
 static volatile bool     g923_do_port_reset      = false;
 static uint8_t           g923_reset_hub_addr     = 0;
 static uint8_t           g923_reset_hub_port     = 0;
+static volatile uint32_t g923_ready_timeout_ms    = 0;
+static volatile bool     g923_ready_timeout_fired = false;
 
 void g923_schedule_port_reset(uint8_t hub_addr, uint8_t hub_port, uint32_t delay_ms) {
     g923_reset_hub_addr      = hub_addr;
@@ -82,6 +84,10 @@ void g923_schedule_bus_reset(uint32_t delay_ms) {
     g923_do_bus_reset           = false;
 }
 
+void g923_start_ready_timeout(uint32_t delay_ms) {
+    g923_ready_timeout_ms    = delay_ms;
+    g923_ready_timeout_fired = false;
+}
 
 void extra_init() {
     pio_usb_configuration_t pio_cfg = PIO_USB_DEFAULT_CONFIG;
