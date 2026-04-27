@@ -508,7 +508,7 @@ void g923_on_hidpp_response(const uint8_t* report, uint16_t len) {
                len, G923_FIDX_DEVICE_READY);
 #endif
         g923_init_state = G923_INIT_WAIT_READY;
-        g923_start_ready_timeout(4000);  // fallback if device ready event never arrives
+        g923_start_ready_timeout(2000);  // fallback if device ready event never arrives
         return;
     }
 
