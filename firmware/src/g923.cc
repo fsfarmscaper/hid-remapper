@@ -470,28 +470,44 @@ bool g923_set_leds(uint8_t level) {
 }
 
 // ============================================================
+// Disable Dual Clutch (Feature 0x0D01)
+// ============================================================
+static bool g923_disable_dual_clutch(void) {
+#if CFG_TUD_CDC
+    printf("g923: disabling dual-clutch mode (feat=0x%02X func=%d)\n",
+           G923_FIDX_PEDAL_STATUS, G923_PEDAL_FUNC_SET_MODE);
+#endif
+    uint8_t params[] = { 0x00 };  // 0x00 = disable dual-clutch
+    return hidpp_send_long(G923_FIDX_PEDAL_STATUS, G923_PEDAL_FUNC_SET_MODE,
+                           params, sizeof(params));
+}
+
+// ============================================================
 // HID++ init state machine response handler
 // ============================================================
 
 void g923_on_hidpp_response(const uint8_t* report, uint16_t len) {
 
     // MOUNTED: first IN received — receive path now armed.
-    // Move to WAIT_READY and watch for 0x8100 device ready event.
-    // Do NOT send IRoot yet — device is still in POST.
+    // Move to WAIT_READY and watch for feat=0x11 device ready event.
+    // Do NOT send anything yet — device is still completing POST.
     if (g923_init_state == G923_INIT_MOUNTED) {
 #if CFG_TUD_CDC
-        printf("g923: first IN received (len=%d), waiting for 0x8100 ready\n", len);
+        printf("g923: first IN received (len=%d), waiting for 0x8100 ready (feat=0x%02X)\n",
+               len, G923_FIDX_DEVICE_READY);
 #endif
         g923_init_state = G923_INIT_WAIT_READY;
+        g923_start_ready_timeout(4000);  // fallback if device ready event never arrives
         return;
     }
 
-    // All states past MOUNTED: need at least 6 bytes
-    // report[0] = 0x12 (VLong report ID — not stripped for this device)
-    // report[1] = 0xFF (device index)
+    // All states past MOUNTED require a valid HID++ VLong response:
+    // report[0] = 0x12  (VLong report ID — NOT stripped by TinyUSB for this device)
+    // report[1] = 0xFF  (device index)
     // report[2] = feat_idx
-    // report[3] = func|sw_id
+    // report[3] = func|sw_id  (upper nibble = func, lower = sw_id)
     // report[4+] = params
+    // Confirmed from pcap analysis.
     if (len < 6 || report[0] != HIDPP_REPORT_VLONG) return;
     if (report[1] != HIDPP_DEVICE_INDEX) return;
 
@@ -507,42 +523,54 @@ void g923_on_hidpp_response(const uint8_t* report, uint16_t len) {
     switch (g923_init_state) {
 
         case G923_INIT_WAIT_READY:
-            // Watch for unsolicited 0x8100 event — fires when POST completes.
-            // feat = G923_FIDX_DEVICE_READY (confirm exact value from CDC log).
-            // Log ALL incoming events so the correct feat value is visible.
-            if (feat == G923_FIDX_DEVICE_READY) {
+            // Watch for unsolicited feat=0x11 event (device ready after POST).
+            // Confirmed from pcap: fires exactly once after wheel sweep completes.
+            // feat=0x0D (pedal status) reports arrive repeatedly during POST — ignore.
+            if (feat == G923_FIDX_DEVICE_READY) {  // 0x11
 #if CFG_TUD_CDC
-                printf("g923: 0x8100 device ready — POST complete, starting init\n");
+                printf("g923: device ready (feat=0x11) — POST complete, starting init\n");
 #endif
-                g923_init_state = G923_INIT_WAIT_IROOT;
-                g923_discover_led_feature();
+                g923_init_state = G923_INIT_WAIT_PEDAL_RESET;
+                g923_disable_dual_clutch();
             } else {
 #if CFG_TUD_CDC
-                printf("g923: WAIT_READY got feat=0x%02X func=0x%02X "
-                       "(waiting for 0x%02X)\n",
-                       feat, func, G923_FIDX_DEVICE_READY);
+                printf("g923: WAIT_READY ignoring feat=0x%02X (waiting for 0x%02X)\n",
+                       feat, G923_FIDX_DEVICE_READY);
 #endif
             }
             break;
 
-        case G923_INIT_WAIT_IROOT:
-            // IRoot response — runtime feature index for 0x807A.
-            // Extended dump to confirm which byte holds 0x12:
+        case G923_INIT_WAIT_PEDAL_RESET:
+            // Ack for dual-clutch disable (feat=0x0D, func=1).
+            // HID++ error: feat=0xFF func=0xFF.
+            if (feat == 0xFF && func == 0xFF) {
 #if CFG_TUD_CDC
-            printf("IRoot raw: ");
-            for (uint16_t i = 0; i < len && i < 12; i++) {
-                printf("%02X ", report[i]);
-            }
-            printf("\n");
+                printf("g923: pedal reset error 0x%02X — continuing anyway\n", report[4]);
 #endif
-            // TODO: replace hardcode once dump confirms correct byte
-            g923_led_feat_idx = G923_FIDX_LED_CTRL;  // 0x12 hardcoded pending fix
+                // Non-fatal — proceed to IRoot even if pedal reset failed
+            } else if (feat != G923_FIDX_PEDAL_STATUS) {
+                // Unexpected response while waiting — ignore
+                break;
+            }
+#if CFG_TUD_CDC
+            printf("g923: pedal reset ack (or skipped) — sending IRoot query\n");
+#endif
+            g923_init_state = G923_INIT_WAIT_IROOT;
+            g923_discover_led_feature();
+            break;
+
+        case G923_INIT_WAIT_IROOT:
+            // IRoot getFeature response for 0x807A.
+            // Confirmed from pcap: runtime index is at report[4].
+            // feat=0x00 (IRoot), func=0x0D (sw_id=0xD, func=0).
+            // report[4] = 0x12 = G923_FIDX_LED_CTRL.
+            g923_led_feat_idx = report[4];
 #if CFG_TUD_CDC
             printf("g923: IRoot response — LED feat_idx=0x%02X\n", g923_led_feat_idx);
 #endif
             if (g923_led_feat_idx == 0) {
 #if CFG_TUD_CDC
-                printf("g923: LED feature 0x807A not found, aborting init\n");
+                printf("g923: LED feature 0x807A not found on device, aborting init\n");
 #endif
                 g923_init_state = G923_INIT_IDLE;
                 return;
@@ -552,6 +580,8 @@ void g923_on_hidpp_response(const uint8_t* report, uint16_t len) {
             break;
 
         case G923_INIT_WAIT_LED_ENABLE:
+            // Ack for LED enable (feat=0x12, func=0x3D confirmed from pcap).
+            // HID++ error response: feat=0xFF, func=0xFF, error code in report[4].
             if (feat == 0xFF && func == 0xFF) {
 #if CFG_TUD_CDC
                 printf("g923: LED enable error 0x%02X (NOT_ALLOWED=0x05)\n", report[4]);
@@ -559,23 +589,45 @@ void g923_on_hidpp_response(const uint8_t* report, uint16_t len) {
                 g923_init_state = G923_INIT_IDLE;
                 return;
             }
+            if (feat != G923_FIDX_LED_CTRL) {
+                // Unexpected response — could be a pedal status or position event
+                // arriving while we wait. Ignore and keep waiting.
+#if CFG_TUD_CDC
+                printf("g923: WAIT_LED_ENABLE ignoring feat=0x%02X\n", feat);
+#endif
+                break;
+            }
             g923_led_enabled = true;
 #if CFG_TUD_CDC
-            printf("g923: LED enable ack — sending func6 set\n");
+            printf("g923: LED enable ack (feat=0x%02X func=0x%02X) — sending func6 set\n",
+                   feat, func);
 #endif
             g923_init_state = G923_INIT_WAIT_LED_SET;
             g923_set_leds(1);
             break;
 
         case G923_INIT_WAIT_LED_SET:
+            // Ack for LED set (feat=0x12, func=0x6D confirmed from pcap).
+            if (feat != G923_FIDX_LED_CTRL) {
 #if CFG_TUD_CDC
-            printf("g923: LED set ack — init complete\n");
+                printf("g923: WAIT_LED_SET ignoring feat=0x%02X\n", feat);
+#endif
+                break;
+            }
+#if CFG_TUD_CDC
+            printf("g923: LED set ack (feat=0x%02X func=0x%02X) — init complete\n",
+                   feat, func);
 #endif
             g923_init_state = G923_INIT_DONE;
             break;
 
         case G923_INIT_DONE:
-            // Post-init events — FFB acks, status changes etc.
+            // Post-init unsolicited events:
+            // feat=0x0D → pedal status change (dual-clutch toggle etc.)
+            // feat=0x0B → FFB status
+            // feat=0x01 → wheel position events
+            // feat=0x12 → LED acks for ongoing g923_set_leds calls
+            // No handling needed here until specific post-init features are added.
             break;
 
         case G923_INIT_IDLE:

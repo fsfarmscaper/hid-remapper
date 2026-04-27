@@ -26,12 +26,15 @@
 
 // Confirmed runtime feature indices (from IFeatureSet enumeration)
 // These are fixed for the G923 Xbox firmware — no discovery needed
-#define G923_FIDX_FORCE_FEEDBACK    0x0B  // Feature 0x8123
-#define G923_FIDX_AXIS_SENSITIVITY  0x14  // Feature 0x80A3
+// All confirmed from pcap IFeatureSet enumeration:
+#define G923_FIDX_IFEATURESET       0x02  // IFeatureSet
+#define G923_FIDX_IFIRMWAREINFO     0x03  // IFirmwareInfo
 #define G923_FIDX_AXIS_MODE         0x0A  // Feature 0x8120
-#define G923_FIDX_LED_CTRL          0x12  // Feature 0x807A
-#define G923_FIDX_DEVICE_READY      0x03    // TODO: confirm from CDC log
-#define G923_FIDX_PEDAL_STATUS      0x0D    // TODO: confirm from IRoot scan
+#define G923_FIDX_FORCE_FEEDBACK    0x0B  // Feature 0x8123
+#define G923_FIDX_PEDAL_STATUS      0x0D  // Feature 0x8060 (dual-clutch)
+#define G923_FIDX_DEVICE_READY      0x11  // Device ready notification
+#define G923_FIDX_LED_CTRL          0x12  // Feature 0x807A ✅ confirmed
+#define G923_FIDX_AXIS_SENSITIVITY  0x14  // Feature 0x80A3
 #define G923_PEDAL_FUNC_SET_MODE    1
 
 // Force Feedback functions (Feature 0x8123)
@@ -101,15 +104,15 @@ bool g923_check_hidpp_interface(uint8_t dev_addr, uint8_t instance,
 // HID++ init state machine (Phase 3)
 // ============================================================
 
-// Replace existing g923_init_state_t with:
 typedef enum {
     G923_INIT_IDLE              = 0,
-    G923_INIT_MOUNTED           = 1,  // mounted, waiting for first IN to arm receive path
-    G923_INIT_WAIT_READY        = 2,  // waiting for 0x8100 POST-complete notification
-    G923_INIT_WAIT_IROOT        = 3,  // sent IRoot query, awaiting feature index response
-    G923_INIT_WAIT_LED_ENABLE   = 4,  // sent func3 enable, awaiting ack
-    G923_INIT_WAIT_LED_SET      = 5,  // sent func6 set, awaiting ack
-    G923_INIT_DONE              = 6,
+    G923_INIT_MOUNTED           = 1,  // waiting for first IN to arm receive path
+    G923_INIT_WAIT_READY        = 2,  // waiting for feat=0x11 POST-complete event
+    G923_INIT_WAIT_PEDAL_RESET  = 3,  // sent dual-clutch disable, waiting for ack
+    G923_INIT_WAIT_IROOT        = 4,  // sent IRoot query, waiting for feat_idx
+    G923_INIT_WAIT_LED_ENABLE   = 5,  // sent func3 enable, waiting for ack
+    G923_INIT_WAIT_LED_SET      = 6,  // sent func6 set, waiting for ack
+    G923_INIT_DONE              = 7,
 } g923_init_state_t;
 
 // Called from tuh_hid_report_received_cb for HID++ responses on the HID++ instance.
