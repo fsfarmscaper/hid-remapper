@@ -160,4 +160,7 @@ void g923_simulate_rev_counter(uint8_t accelerator, uint8_t brake, uint8_t stage
 // Apply default settings on connect
 void g923_apply_defaults();
 
+// Called from read_report() when ready timeout expires (no 0x8100 event received)
+void g923_on_ready_timeout(void);
+
 #endif // _G923_H_

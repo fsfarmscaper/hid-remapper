@@ -49,6 +49,9 @@ static uint8_t g923_led_last_level = 0xFF;
 // HID++ init state machine
 static g923_init_state_t g923_init_state = G923_INIT_IDLE;
 
+// Forward declaration — defined in remapper_single.cc
+extern void g923_start_ready_timeout(uint32_t delay_ms);
+
 // Composite interface handle for queue_out_report()
 static uint16_t g923_iface() {
     return (uint16_t)(g923_hidpp_dev_addr << 8) | g923_hidpp_instance;
@@ -418,7 +421,6 @@ bool g923_set_leds_ps(uint8_t setting) {
 
 // Discover feature 0x807A via IRoot (index 0x00, func 0)
 // Response byte[4] = runtime feature index
-// TODO: parse IRoot response to extract runtime index dynamically
 static bool g923_discover_led_feature(void) {
 #if CFG_TUD_CDC
     printf("g923_discover_led_feature: sending IRoot query for page 0x%04X\n",
@@ -482,6 +484,15 @@ static bool g923_disable_dual_clutch(void) {
                            params, sizeof(params));
 }
 
+void g923_on_ready_timeout() {
+    if (g923_init_state != G923_INIT_WAIT_READY) return;
+#if CFG_TUD_CDC
+    printf("g923: device ready timeout — proceeding with pedal reset\n");
+#endif
+    g923_init_state = G923_INIT_WAIT_PEDAL_RESET;
+    g923_disable_dual_clutch();
+}
+
 // ============================================================
 // HID++ init state machine response handler
 // ============================================================
@@ -541,19 +552,18 @@ void g923_on_hidpp_response(const uint8_t* report, uint16_t len) {
             break;
 
         case G923_INIT_WAIT_PEDAL_RESET:
-            // Ack for dual-clutch disable (feat=0x0D, func=1).
-            // HID++ error: feat=0xFF func=0xFF.
             if (feat == 0xFF && func == 0xFF) {
 #if CFG_TUD_CDC
                 printf("g923: pedal reset error 0x%02X — continuing anyway\n", report[4]);
 #endif
-                // Non-fatal — proceed to IRoot even if pedal reset failed
+                // Non-fatal — fall through to IRoot regardless
             } else if (feat != G923_FIDX_PEDAL_STATUS) {
-                // Unexpected response while waiting — ignore
+                // Not the ack we're waiting for — could be a position event. Ignore.
                 break;
             }
+            // Got either a valid ack or a non-fatal error — proceed to IRoot
 #if CFG_TUD_CDC
-            printf("g923: pedal reset ack (or skipped) — sending IRoot query\n");
+            printf("g923: pedal reset done — sending IRoot query\n");
 #endif
             g923_init_state = G923_INIT_WAIT_IROOT;
             g923_discover_led_feature();

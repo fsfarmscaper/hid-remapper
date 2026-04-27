@@ -131,7 +131,12 @@ void read_report(bool* new_report, bool* tick) {
         busy_wait_ms(20);
         tuh_rhport_reset_bus(BOARD_TUH_RHPORT, false);
     }     
-    
+
+    if (g923_ready_timeout_fired) {
+        g923_ready_timeout_fired = false;
+        g923_on_ready_timeout();
+    }    
+
     // Service device mode (CDC for debug output)
     tud_task();
     cdc_debug_task();
@@ -366,6 +371,9 @@ void __no_inline_not_in_flash_func(sof_callback)() {
     if (g923_bus_reset_countdown_ms > 0) {
         if (--g923_bus_reset_countdown_ms == 0) g923_do_bus_reset = true;
     }
+    if (g923_ready_timeout_ms > 0) {
+        if (--g923_ready_timeout_ms == 0) g923_ready_timeout_fired = true;
+    }    
 }
 
 void get_report_cb(uint8_t dev_addr, uint8_t interface, uint8_t report_id, uint8_t report_type, uint8_t* report, uint16_t len) {
